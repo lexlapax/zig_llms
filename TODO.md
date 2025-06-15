@@ -57,11 +57,11 @@
    14.4. [ ] Implement async hook execution support
    14.5. [x] Add hook priority and ordering system - Completed 2025-06-15
 
-### 15. Hook Utilities
-   15.1. [ ] Create hooks/builders.zig for fluent hook construction
-   15.2. [ ] Add hooks/filters.zig for conditional hook execution
-   15.3. [ ] Implement hooks/middleware.zig for hook middleware pattern
-   15.4. [ ] Create hooks/adapters.zig for external hook integration
+### 15. Hook Utilities - COMPLETED
+   15.1. [x] Create hooks/builders.zig for fluent hook construction - Completed 2025-06-15
+   15.2. [x] Add hooks/filters.zig for conditional hook execution - Completed 2025-06-15
+   15.3. [x] Implement hooks/middleware.zig for hook middleware pattern - Completed 2025-06-15
+   15.4. [x] Create hooks/adapters.zig for external hook integration - Completed 2025-06-15
 
 ### Example Usage:
 ```zig

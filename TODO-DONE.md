@@ -42,6 +42,31 @@
 - [ ] 14.4. Implement async hook execution support - FUTURE
 - [x] 14.5. Add hook priority and ordering system - Completed 2025-06-15
 
+### 15. Hook Utilities - COMPLETED
+- [x] 15.1. Create hooks/builders.zig for fluent hook construction - Completed 2025-06-15
+  - Created HookBuilder for generic hook construction with fluent API
+  - Implemented LambdaHookBuilder for inline hook definitions
+  - Added CompositeHookBuilder for combining multiple hooks
+  - Provided CommonHooks with predefined builders for logging, metrics, validation, caching, and rate limiting
+- [x] 15.2. Add hooks/filters.zig for conditional hook execution - Completed 2025-06-15
+  - Created HookFilter interface for conditional execution
+  - Implemented FilteredHook wrapper for applying filters
+  - Added predefined filters: PointFilter, PredicateFilter, RateLimitFilter, MetadataFilter, TimeWindowFilter
+  - Created CompositeFilter for combining multiple filters with logical operators
+  - Provided FilterBuilder for fluent filter construction
+- [x] 15.3. Implement hooks/middleware.zig for hook middleware pattern - Completed 2025-06-15
+  - Created HookMiddleware interface for processing pipelines
+  - Implemented MiddlewareChain for composing middleware
+  - Added predefined middleware: LoggingMiddleware, ErrorHandlingMiddleware, CachingMiddleware, TransformationMiddleware, ValidationMiddleware
+  - Provided MiddlewareBuilder for fluent middleware construction
+- [x] 15.4. Create hooks/adapters.zig for external hook integration - Completed 2025-06-15
+  - Created ExternalHookAdapter interface for integrating external hook systems
+  - Implemented FunctionPointerAdapter for C-style function hooks
+  - Added JsonRpcHookAdapter for remote hooks via JSON-RPC
+  - Created PluginHookAdapter for dynamic library plugin hooks
+  - Implemented EventEmitterAdapter for pub/sub style event hooks
+  - Added AdapterManager for centralized adapter registration
+
 ## Phase 8: Event System - Completed 2025-06-15
 
 ### 16. Event System - COMPLETED

@@ -12,7 +12,7 @@ pub const MAX_ERROR_STACK_DEPTH = 16;
 pub const ErrorSeverity = enum(c_int) {
     info = 0,
     warning = 1,
-    error = 2,
+    @"error" = 2,
     critical = 3,
     fatal = 4,
     
@@ -20,12 +20,15 @@ pub const ErrorSeverity = enum(c_int) {
         return switch (self) {
             .info => "INFO",
             .warning => "WARNING",
-            .error => "ERROR", 
+            .@"error" => "ERROR", 
             .critical => "CRITICAL",
             .fatal => "FATAL",
         };
     }
 };
+
+// Alias for shorter usage
+pub const Severity = ErrorSeverity;
 
 // Error categories for better organization
 pub const ErrorCategory = enum(c_int) {
@@ -59,6 +62,9 @@ pub const ErrorCategory = enum(c_int) {
         };
     }
 };
+
+// Alias for shorter usage
+pub const ErrorContext = ErrorCategory;
 
 // Detailed error information
 pub const ErrorInfo = struct {
@@ -293,31 +299,31 @@ pub fn reportError(
 
 // Convenience functions for common error types
 pub fn reportMemoryError(message: []const u8, context: []const u8) void {
-    reportError(-3, .memory, .error, message, context);
+    reportError(-3, ErrorContext.memory, Severity.@"error", message, context);
 }
 
 pub fn reportValidationError(message: []const u8, context: []const u8) void {
-    reportError(-2, .validation, .error, message, context);
+    reportError(-2, ErrorContext.validation, Severity.@"error", message, context);
 }
 
 pub fn reportAgentError(message: []const u8, context: []const u8) void {
-    reportError(-5, .agent, .error, message, context);
+    reportError(-5, ErrorContext.agent, Severity.@"error", message, context);
 }
 
 pub fn reportToolError(message: []const u8, context: []const u8) void {
-    reportError(-6, .tool, .error, message, context);
+    reportError(-6, ErrorContext.tool, Severity.@"error", message, context);
 }
 
 pub fn reportWorkflowError(message: []const u8, context: []const u8) void {
-    reportError(-7, .workflow, .error, message, context);
+    reportError(-7, ErrorContext.workflow, Severity.@"error", message, context);
 }
 
 pub fn reportJsonError(message: []const u8, context: []const u8) void {
-    reportError(-9, .json, .error, message, context);
+    reportError(-9, ErrorContext.json, Severity.@"error", message, context);
 }
 
 pub fn reportTimeoutError(message: []const u8, context: []const u8) void {
-    reportError(-10, .timeout, .error, message, context);
+    reportError(-10, ErrorContext.timeout, Severity.@"error", message, context);
 }
 
 // Get last error
@@ -388,11 +394,11 @@ pub fn REPORT_ERROR(comptime code: c_int, comptime category: ErrorCategory, comp
 
 // Tests
 test "error info creation" {
-    const error_info = ErrorInfo.init(-5, .agent, .error, "Test error", "Test context");
+    const error_info = ErrorInfo.init(-5, ErrorContext.agent, Severity.@"error", "Test error", "Test context");
     
     try std.testing.expectEqual(@as(c_int, -5), error_info.code);
     try std.testing.expectEqual(ErrorCategory.agent, error_info.category);
-    try std.testing.expectEqual(ErrorSeverity.error, error_info.severity);
+    try std.testing.expectEqual(ErrorSeverity.@"error", error_info.severity);
     
     const message_str = std.mem.sliceTo(&error_info.message, 0);
     try std.testing.expectEqualStrings("Test error", message_str);
@@ -403,8 +409,8 @@ test "error stack operations" {
     
     try std.testing.expectEqual(@as(usize, 0), stack.getCount());
     
-    const error1 = ErrorInfo.init(-1, .general, .error, "Error 1", "Context 1");
-    const error2 = ErrorInfo.init(-2, .memory, .critical, "Error 2", "Context 2");
+    const error1 = ErrorInfo.init(-1, ErrorContext.general, Severity.@"error", "Error 1", "Context 1");
+    const error2 = ErrorInfo.init(-2, ErrorContext.memory, Severity.critical, "Error 2", "Context 2");
     
     stack.push(error1);
     stack.push(error2);

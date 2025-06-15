@@ -388,7 +388,7 @@ test "hook execution" {
         
         pub fn execute(hook: *Hook, context: *HookContext) !HookResult {
             _ = context;
-            const self = @fieldParentPtr(@This(), "hook", hook);
+            const self: *@This() = @fieldParentPtr("hook", hook);
             self.execute_count += 1;
             
             return HookResult{

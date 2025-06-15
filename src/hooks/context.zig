@@ -185,7 +185,7 @@ pub const EnhancedHookContext = struct {
     }
     
     // Export context data
-    pub fn export(self: *const EnhancedHookContext, allocator: std.mem.Allocator) !std.json.Value {
+    pub fn exportToJson(self: *const EnhancedHookContext, allocator: std.mem.Allocator) !std.json.Value {
         var obj = std.json.ObjectMap.init(allocator);
         errdefer obj.deinit();
         
@@ -399,8 +399,8 @@ pub const TraceSpan = struct {
     }
     
     pub fn getDuration(self: *const TraceSpan) ?i64 {
-        if (self.end_time) |end| {
-            return end - self.start_time;
+        if (self.end_time) |end_time| {
+            return end_time - self.start_time;
         }
         return null;
     }

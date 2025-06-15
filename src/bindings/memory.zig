@@ -98,7 +98,6 @@ pub const TrackingAllocator = struct {
     }
     
     fn alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
-        _ = ret_addr;
         const self: *Self = @ptrCast(@alignCast(ctx));
         
         self.mutex.lock();
@@ -161,8 +160,6 @@ pub const TrackingAllocator = struct {
     }
     
     fn free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
-        _ = buf_align;
-        _ = ret_addr;
         const self: *Self = @ptrCast(@alignCast(ctx));
         
         self.mutex.lock();

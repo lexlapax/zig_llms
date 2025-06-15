@@ -59,8 +59,8 @@ pub const ZigLLMSError = enum(c_int) {
 pub const ZigLLMSConfig = extern struct {
     allocator_type: c_int, // 0 = default, 1 = arena, 2 = fixed buffer
     log_level: c_int,      // 0 = debug, 1 = info, 2 = warn, 3 = error
-    enable_events: c_bool,
-    enable_metrics: c_bool,
+    enable_events: bool,
+    enable_metrics: bool,
     max_memory_mb: c_int,
 };
 
@@ -73,8 +73,8 @@ pub const ZigLLMSAgentConfig = extern struct {
     api_url: [*c]const u8,
     max_tokens: c_int,
     temperature: f32,
-    enable_memory: c_bool,
-    enable_tools: c_bool,
+    enable_memory: bool,
+    enable_tools: bool,
 };
 
 pub const ZigLLMSResult = extern struct {
@@ -440,8 +440,8 @@ export fn zigllms_tool_register(
     if (!global_initialized) {
         error_handling.reportError(
             ZigLLMSError.INITIALIZATION_FAILED.toInt(),
-            .tool,
-            .error,
+            error_handling.ErrorContext.tool,
+            error_handling.Severity.@"error",
             "Library not initialized",
             "zigllms_tool_register"
         );
@@ -451,8 +451,8 @@ export fn zigllms_tool_register(
     if (name == null or description == null or callback_ptr == null) {
         error_handling.reportError(
             ZigLLMSError.NULL_POINTER.toInt(),
-            .tool,
-            .error,
+            error_handling.ErrorContext.tool,
+            error_handling.Severity.@"error",
             "Null pointer provided to tool registration",
             "zigllms_tool_register"
         );
@@ -463,8 +463,8 @@ export fn zigllms_tool_register(
     initExternalToolRegistry() catch {
         error_handling.reportError(
             ZigLLMSError.MEMORY_ERROR.toInt(),
-            .tool,
-            .error,
+            error_handling.ErrorContext.tool,
+            error_handling.Severity.@"error",
             "Failed to initialize external tool registry",
             "zigllms_tool_register"
         );
@@ -487,8 +487,8 @@ export fn zigllms_tool_register(
             ) catch {
                 error_handling.reportError(
                     ZigLLMSError.JSON_ERROR.toInt(),
-                    .tool,
-                    .error,
+                    error_handling.ErrorContext.tool,
+                    error_handling.Severity.@"error",
                     "Failed to parse tool schema JSON",
                     "zigllms_tool_register"
                 );
@@ -508,8 +508,8 @@ export fn zigllms_tool_register(
     ) catch {
         error_handling.reportError(
             ZigLLMSError.MEMORY_ERROR.toInt(),
-            .tool,
-            .error,
+            error_handling.ErrorContext.tool,
+            error_handling.Severity.@"error",
             "Failed to create external tool wrapper",
             "zigllms_tool_register"
         );
@@ -526,8 +526,8 @@ export fn zigllms_tool_register(
             wrapper.deinit();
             error_handling.reportError(
                 ZigLLMSError.INVALID_PARAMETER.toInt(),
-                .tool,
-                .warning,
+            error_handling.ErrorContext.tool,
+                error_handling.Severity.warning,
                 "Tool with this name already registered",
                 "zigllms_tool_register"
             );
@@ -539,8 +539,8 @@ export fn zigllms_tool_register(
             wrapper.deinit();
             error_handling.reportError(
                 ZigLLMSError.MEMORY_ERROR.toInt(),
-                .tool,
-                .error,
+            error_handling.ErrorContext.tool,
+            error_handling.Severity.@"error",
                 "Failed to register external tool",
                 "zigllms_tool_register"
             );
@@ -1170,8 +1170,8 @@ export fn zigllms_events_subscribe(
     if (!global_initialized) {
         error_handling.reportError(
             ZigLLMSError.INITIALIZATION_FAILED.toInt(),
-            .general,
-            .error,
+            error_handling.ErrorContext.general,
+            error_handling.Severity.@"error",
             "Library not initialized",
             "zigllms_events_subscribe"
         );
@@ -1181,8 +1181,8 @@ export fn zigllms_events_subscribe(
     if (emitter_handle == null or event_type == null or callback_ptr == null) {
         error_handling.reportError(
             ZigLLMSError.NULL_POINTER.toInt(),
-            .general,
-            .error,
+            error_handling.ErrorContext.general,
+            error_handling.Severity.@"error",
             "Null pointer provided to event subscription",
             "zigllms_events_subscribe"
         );
@@ -1195,8 +1195,8 @@ export fn zigllms_events_subscribe(
     const subscription_id = c_emitter.subscribe(event_type_str, callback_ptr.?) catch {
         error_handling.reportError(
             ZigLLMSError.MEMORY_ERROR.toInt(),
-            .general,
-            .error,
+            error_handling.ErrorContext.general,
+            error_handling.Severity.@"error",
             "Failed to create event subscription",
             "zigllms_events_subscribe"
         );
@@ -1216,6 +1216,7 @@ export fn zigllms_events_emit(
         return ZigLLMSError.NULL_POINTER.toInt();
     }
     
+    _ = data_json; // TODO: Use this parameter when implementing event emission
     // Event emission would be implemented here
     return ZigLLMSError.SUCCESS.toInt();
 }
@@ -1285,7 +1286,7 @@ export fn zigllms_set_error_callback(callback: ?*const fn (error_code: c_int, ca
 
 /// Get last error information
 export fn zigllms_get_last_error(result: *ZigLLMSResult) c_int {
-    if (error_handling.getLastError()) |error_info| {
+    if (error_handling.getLastError()) |_| {
         // Format error as JSON
         const error_json = error_handling.formatErrorStackAsJson(global_allocator) catch {
             result.error_code = ZigLLMSError.JSON_ERROR.toInt();

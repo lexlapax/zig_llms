@@ -1,7 +1,7 @@
 # TODO List for zig_llms
 
-## Project Status: Core Framework Complete ✅
-**Major milestones achieved:** Foundation, Providers, Agents, Tools, Workflows, Hooks, Events, Output Parsing, Memory
+## Project Status: Core Framework + C-API Complete ✅
+**Major milestones achieved:** Foundation, Providers, Agents, Tools, Workflows, Hooks, Events, Output Parsing, Memory, C-API
 
 ---
 
@@ -28,16 +28,16 @@
    17.2. [ ] Add embedding generation support - REVISIT  
    17.3. [ ] Implement similarity search - REVISIT
 
-## Phase 8: C-API and Bindings (Weeks 13-14) - HIGH PRIORITY
+## Phase 8: C-API and Bindings (Weeks 13-14) - ✅ COMPLETED
 
-### 18. C-API Implementation
-   18.1. [ ] Create C-API functions in bindings/capi.zig
-   18.2. [ ] Add memory management for C interface
-   18.3. [ ] Implement structured error handling for C-API
-   18.4. [ ] Create C header file generation
-   18.5. [ ] Add tool registration from external languages
-   18.6. [ ] Implement event subscription for C clients
-   18.7. [ ] Add type conversion helpers (to/from JSON)
+### 18. C-API Implementation - ✅ COMPLETED
+   18.1. [✅] Create C-API functions in bindings/capi.zig
+   18.2. [✅] Add memory management for C interface 
+   18.3. [✅] Implement structured error handling for C-API
+   18.4. [✅] Create C header file generation
+   18.5. [✅] Add tool registration from external languages
+   18.6. [✅] Implement event subscription for C clients
+   18.7. [✅] Add type conversion helpers (to/from JSON)
 
 ### 19. Language Bindings
    19.1. [ ] Design Lua binding interface
@@ -107,5 +107,6 @@
 - Workflow engine with step management
 - Agent system with provider abstraction
 - Memory management (short-term complete)
+- **C-API bindings complete** with full language integration support
 
-**Next Priority:** C-API and Documentation for public release
+**Next Priority:** Lua bindings and Documentation for public release

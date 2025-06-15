@@ -27,65 +27,7 @@
 
 ## Phase 5: Workflow Engine (Weeks 9-10) - COMPLETED (See TODO-DONE.md)
 
-## Phase 6: Comprehensive Hook System
-
-### Design Goals:
-   - Hooks should be implemented at the BaseAgent level to automatically work with workflows
-   - Support multiple hook types (metrics, logging, tracing, validation, etc.)
-   - Allow dynamic hook registration and configuration
-   - Enable hook composition and chaining
-   - Provide built-in, ready-to-use hook implementations
-
-### 12. Hook Infrastructure - COMPLETED
-   12.1. [x] Create hooks/types.zig with base hook interfaces - Completed 2025-06-15
-   12.2. [x] Implement hooks/registry.zig for hook management - Completed 2025-06-15
-   12.3. [x] Create hooks/context.zig for hook execution context - Completed 2025-06-15
-   12.4. [x] Add hook points to BaseAgent for automatic workflow support - Completed 2025-06-15
-
-### 13. Built-in Hook Types
-   13.1. [ ] Implement hooks/metrics.zig for performance metrics collection
-   13.2. [ ] Create hooks/logging.zig for structured logging hooks
-   13.3. [ ] Add hooks/tracing.zig for distributed tracing support
-   13.4. [ ] Create hooks/validation.zig for input/output validation
-   13.5. [ ] Implement hooks/caching.zig for result caching
-   13.6. [ ] Add hooks/rate_limiting.zig for API rate limiting
-
-### 14. Hook Integration
-   14.1. [x] Integrate hooks with agent lifecycle (init, before, after, cleanup) - Completed 2025-06-15
-   14.2. [x] Add hook configuration to AgentConfig and WorkflowConfig - Completed 2025-06-15
-   14.3. [x] Create hook composition for chaining multiple hooks - Completed 2025-06-15
-   14.4. [ ] Implement async hook execution support
-   14.5. [x] Add hook priority and ordering system - Completed 2025-06-15
-
-### 15. Hook Utilities - COMPLETED
-   15.1. [x] Create hooks/builders.zig for fluent hook construction - Completed 2025-06-15
-   15.2. [x] Add hooks/filters.zig for conditional hook execution - Completed 2025-06-15
-   15.3. [x] Implement hooks/middleware.zig for hook middleware pattern - Completed 2025-06-15
-   15.4. [x] Create hooks/adapters.zig for external hook integration - Completed 2025-06-15
-
-### Example Usage:
-```zig
-// Metrics hook automatically tracks execution time, token usage, etc.
-const metrics_hook = try MetricsHook.init(allocator, .{
-    .track_latency = true,
-    .track_tokens = true,
-    .export_interval_ms = 1000,
-});
-
-// Logging hook provides structured logging at each lifecycle point
-const logging_hook = try LoggingHook.init(allocator, .{
-    .level = .info,
-    .include_inputs = true,
-    .include_outputs = false,
-});
-
-// Add hooks to agent config - works for both agents and workflows
-var agent_config = AgentConfig{
-    .hooks = &[_]Hook{ metrics_hook, logging_hook },
-};
-
-// Hooks automatically execute at lifecycle points (init, beforeRun, afterRun, etc.)
-```
+## Phase 6: Comprehensive Hook System - COMPLETED (See TODO-DONE.md)
 
 ## Phase 7: Memory Systems (Weeks 11-12) - PARTIALLY COMPLETE
 

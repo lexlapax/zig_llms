@@ -6,26 +6,14 @@
 
 ## Phase 3: Agent System (Weeks 5-6)
 
-### 6. Core Agent Implementation
-   6.1. [ ] Implement agent interface and lifecycle in agent.zig
-   6.2. [ ] Create state.zig for thread-safe state management
-   6.3. [ ] Implement agent initialization and cleanup
-   6.4. [ ] Add agent execution hooks (beforeRun, afterRun)
+### 6. Core Agent Implementation - COMPLETED (See TODO-DONE.md)
 
-### 7. Agent Features - DEFER
+### 7. Agent Features - FUTURE
    7.1. [ ] Add prompt management in prompt.zig
    7.2. [ ] Implement conversation tracking
    7.3. [ ] Create agent factory pattern
 
-## Phase 4: Tool System (Weeks 7-8)
-
-### 8. Tool Infrastructure
-   8.1. [ ] Define tool interface in tool.zig
-   8.2. [ ] Create tool_registry.zig with dynamic registration support
-   8.3. [ ] Implement tool discovery mechanism
-   8.4. [ ] Add tool validation system
-   8.5. [ ] Implement tool persistence (save/load)
-   8.6. [ ] Add external tool callback support
+## Phase 4: Tool System (Weeks 7-8) - COMPLETED (See TODO-DONE.md)
 
 ### 9. Built-in Tools
    9.1. [ ] Create tools/file.zig for file operations

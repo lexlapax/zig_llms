@@ -7,7 +7,13 @@ const std = @import("std");
 pub const types = @import("types.zig");
 pub const errors = @import("error.zig");
 pub const context = @import("context.zig");
-pub const state = @import("state.zig");
+pub const state = struct {
+    pub const State = @import("state.zig").State;
+    pub const StateSnapshot = @import("state.zig").StateSnapshot;
+    pub const StateUpdate = @import("state.zig").StateUpdate;
+    pub const StateWatchCallback = @import("state.zig").StateWatchCallback;
+    pub const StatePool = @import("state.zig").StatePool;
+};
 
 // Provider system
 pub const provider = @import("provider.zig");
@@ -18,12 +24,43 @@ pub const providers = struct {
 };
 
 // Agent system
-pub const agent = @import("agent.zig");
+pub const agent = struct {
+    pub const Agent = @import("agent.zig").Agent;
+    pub const AgentType = @import("agent.zig").AgentType;
+    pub const BaseAgent = @import("agent.zig").BaseAgent;
+    pub const LLMAgent = @import("agent.zig").LLMAgent;
+    pub const AgentConfig = @import("agent.zig").AgentConfig;
+    pub const AgentLifecycle = @import("agent.zig").AgentLifecycle;
+};
 pub const prompt = @import("prompt.zig");
 
 // Tool system
-pub const tool = @import("tool.zig");
-pub const tool_registry = @import("tool_registry.zig");
+pub const tool = struct {
+    pub const Tool = @import("tool.zig").Tool;
+    pub const ToolMetadata = @import("tool.zig").ToolMetadata;
+    pub const BaseTool = @import("tool.zig").BaseTool;
+    pub const ToolResult = @import("tool.zig").ToolResult;
+    pub const ToolExecutor = @import("tool.zig").ToolExecutor;
+    pub const ToolBuilder = @import("tool.zig").ToolBuilder;
+    pub const ToolCategory = @import("tool.zig").ToolCategory;
+    pub const ToolCapability = @import("tool.zig").ToolCapability;
+    pub const ToolExample = @import("tool.zig").ToolExample;
+    pub const createFunctionTool = @import("tool.zig").createFunctionTool;
+};
+pub const tool_registry = struct {
+    pub const ToolRegistry = @import("tool_registry.zig").ToolRegistry;
+    pub const ToolInfo = @import("tool_registry.zig").ToolInfo;
+    pub const ToolFilter = @import("tool_registry.zig").ToolFilter;
+    pub const RegistryConfig = @import("tool_registry.zig").RegistryConfig;
+    pub const ExternalLoader = @import("tool_registry.zig").ExternalLoader;
+    pub const DiscoveryResult = @import("tool_registry.zig").DiscoveryResult;
+};
+pub const tools = struct {
+    pub const discovery = @import("tools/discovery.zig");
+    pub const validation = @import("tools/validation.zig");
+    pub const persistence = @import("tools/persistence.zig");
+    pub const external = @import("tools/external.zig");
+};
 
 // Workflow system
 pub const workflow = @import("workflow.zig");

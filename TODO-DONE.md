@@ -106,3 +106,67 @@
 - [x] Create outputs/recovery.zig for common fixes - Completed 2025-06-15
 - [x] Add parser registry for multiple formats - Completed 2025-06-15
 - [x] Implement schema-guided extraction - Completed 2025-06-15
+
+## Phase 3: Agent System - Partially Complete 2025-06-15
+
+### 6. Core Agent Implementation (All Completed)
+- [x] Implement agent interface and lifecycle in agent.zig - Completed 2025-06-15
+  - Created Agent interface with vtable pattern
+  - Implemented BaseAgent with full lifecycle support
+  - Implemented LLMAgent for provider-based agents
+  - Added AgentLifecycle status tracking
+- [x] Create state.zig for thread-safe state management - Completed 2025-06-15
+  - Enhanced State with thread-safe operations using mutex
+  - Added snapshot and restore functionality
+  - Implemented batch updates for atomic operations
+  - Created StatePool for agent hierarchies
+  - Added state export to JSON
+- [x] Implement agent initialization and cleanup - Completed 2025-06-15
+  - Initialization sets up context and metadata
+  - Cleanup properly releases resources
+  - Lifecycle tracking throughout
+- [x] Add agent execution hooks (beforeRun, afterRun) - Completed 2025-06-15
+  - Vtable-based hook system
+  - Full execution flow with pre/post processing
+  - Extensible for custom agent types
+
+## Phase 4: Tool System - Complete 2025-06-15
+
+### 8. Tool Infrastructure (All Completed)
+- [x] Define tool interface in tool.zig - Completed 2025-06-15
+  - Enhanced Tool interface with vtable pattern
+  - Added ToolMetadata with comprehensive configuration
+  - Implemented BaseTool for inheritance
+  - Added ToolResult, ToolExecutor, and ToolBuilder utilities
+  - Support for tool categories, capabilities, and examples
+- [x] Create tool_registry.zig with dynamic registration support - Completed 2025-06-15
+  - Thread-safe ToolRegistry with discovery and filtering
+  - Support for builtin and dynamic tool registration
+  - External tool loader interface
+  - Pattern matching for tool discovery
+  - Configurable registry behavior
+- [x] Implement tool discovery mechanism - Completed 2025-06-15
+  - Created tools/discovery.zig with multiple discoverer types
+  - FilesystemDiscoverer for scanning directories
+  - EnvDiscoverer for environment variable paths
+  - CompositeDiscoverer for combining discovery strategies
+  - Tool manifest support with JSON configuration
+- [x] Add tool validation system - Completed 2025-06-15
+  - Created tools/validation.zig with comprehensive validation
+  - Metadata validation (names, versions, schemas)
+  - Schema validation for inputs/outputs
+  - Permission checking and capability validation
+  - Test execution with timeout support
+  - Configurable validation levels
+- [x] Implement tool persistence (save/load) - Completed 2025-06-15
+  - Created tools/persistence.zig for state management
+  - Support for JSON and binary persistence formats
+  - ToolStateManager for runtime statistics
+  - Tool execution tracking and metrics
+  - Auto-save functionality
+- [x] Add external tool callback support - Completed 2025-06-15
+  - Created tools/external.zig for non-Zig tool integration
+  - Support for FFI, process spawning, scripts, plugins
+  - HTTP and gRPC endpoint support
+  - ExternalToolBuilder for fluent configuration
+  - Multiple execution strategies for different tool types

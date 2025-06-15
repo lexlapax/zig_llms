@@ -20,6 +20,33 @@
 - [x] 10.6. Implement workflow/loop.zig - Completed 2025-06-15
 - [x] 10.7. Create workflow/script_step.zig for script integration - Completed 2025-06-15
 
+### 11. Workflow Features - COMPLETED
+- [x] 11.1. Add workflow composition - Completed 2025-06-15
+  - Created workflow/composition.zig with comprehensive composition support
+  - Implemented WorkflowComposition for embedding workflows within workflows
+  - Added ParameterMapping system with multiple rule types (direct, path, template, transform, constant, expression)
+  - Created WorkflowRepository for managing workflow definitions
+  - Implemented ComposableWorkflowStep for execution
+  - Added error strategies and retry configuration
+  - Created WorkflowCompositionBuilder for fluent API
+- [x] 11.2. Implement error handling in workflows - Completed 2025-06-15
+  - Created workflow/error_handling.zig with comprehensive error handling
+  - Implemented WorkflowError types and ErrorDetails
+  - Added RetryPolicy with multiple backoff strategies (fixed, linear, exponential, fibonacci)
+  - Implemented CircuitBreaker pattern with state management
+  - Created FallbackStrategy for error recovery
+  - Added CompensationHandler for rollback operations
+  - Implemented ErrorFilter system for selective error handling
+  - Created WorkflowErrorHandler to tie everything together
+- [x] 11.3. Add workflow state management - Completed 2025-06-15
+  - Created workflow/state_management.zig for state persistence and recovery
+  - Implemented WorkflowStateManager with multiple storage backends
+  - Added Checkpoint system for workflow snapshots
+  - Created StateStore abstraction with memory and file backends
+  - Implemented state serialization/deserialization
+  - Added recovery strategies for workflow resumption
+  - Created instance ID generation for workflow tracking
+
 ## Initial Planning Phase
 
 ### Build System

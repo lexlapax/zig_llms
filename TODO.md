@@ -23,83 +23,137 @@
    9.5. [ ] Create tools/process.zig for process execution
    9.6. [ ] Create tools/math.zig for match calculation operations
    9.7. [ ] Create tools/feed.zig for RSS, Atom, JSON Feed formats
+   9.8. [ ] Ability to wrap agents/workflows as tools
 
 ## Phase 5: Workflow Engine (Weeks 9-10) - COMPLETED (See TODO-DONE.md)
 
-### 10. Workflow Patterns - COMPLETED (See TODO-DONE.md)
+## Phase 6: Comprehensive Hook System
 
-### 11. Workflow Features
-   11.1. [ ] Add workflow composition
-   11.2. [ ] Implement error handling in workflows
-   11.3. [ ] Add workflow state management
+### Design Goals:
+   - Hooks should be implemented at the BaseAgent level to automatically work with workflows
+   - Support multiple hook types (metrics, logging, tracing, validation, etc.)
+   - Allow dynamic hook registration and configuration
+   - Enable hook composition and chaining
+   - Provide built-in, ready-to-use hook implementations
 
-## Phase 6: Memory Systems (Weeks 11-12) - PARTIALLY COMPLETE
+### 12. Hook Infrastructure
+   12.1. [ ] Create hooks/types.zig with base hook interfaces
+   12.2. [ ] Implement hooks/registry.zig for hook management
+   12.3. [ ] Create hooks/context.zig for hook execution context
+   12.4. [ ] Add hook points to BaseAgent for automatic workflow support
 
-### 12. Short-term Memory - COMPLETED (See TODO-DONE.md)
+### 13. Built-in Hook Types
+   13.1. [ ] Implement hooks/metrics.zig for performance metrics collection
+   13.2. [ ] Create hooks/logging.zig for structured logging hooks
+   13.3. [ ] Add hooks/tracing.zig for distributed tracing support
+   13.4. [ ] Create hooks/validation.zig for input/output validation
+   13.5. [ ] Implement hooks/caching.zig for result caching
+   13.6. [ ] Add hooks/rate_limiting.zig for API rate limiting
 
-### 13. Long-term Memory (Future)
-   13.1. [ ] Design vector store interface - REVISIT
-   13.2. [ ] Add embedding generation support - REVISIT
-   13.3. [ ] Implement similarity search - REVISIT
+### 14. Hook Integration
+   14.1. [ ] Integrate hooks with agent lifecycle (init, before, after, cleanup)
+   14.2. [ ] Add hook configuration to AgentConfig and WorkflowConfig
+   14.3. [ ] Create hook composition for chaining multiple hooks
+   14.4. [ ] Implement async hook execution support
+   14.5. [ ] Add hook priority and ordering system
 
-## Phase 7: C-API and Bindings (Weeks 13-14)
+### 15. Hook Utilities
+   15.1. [ ] Create hooks/builders.zig for fluent hook construction
+   15.2. [ ] Add hooks/filters.zig for conditional hook execution
+   15.3. [ ] Implement hooks/middleware.zig for hook middleware pattern
+   15.4. [ ] Create hooks/adapters.zig for external hook integration
 
-### 14. C-API Implementation
-   14.1. [ ] Create C-API functions in bindings/capi.zig
-   14.2. [ ] Add memory management for C interface
-   14.3. [ ] Implement structured error handling for C-API
-   14.4. [ ] Create C header file generation
-   14.5. [ ] Add tool registration from external languages
-   14.6. [ ] Implement event subscription for C clients
-   14.7. [ ] Add type conversion helpers (to/from JSON)
+### Example Usage:
+```zig
+// Metrics hook automatically tracks execution time, token usage, etc.
+const metrics_hook = try MetricsHook.init(allocator, .{
+    .track_latency = true,
+    .track_tokens = true,
+    .export_interval_ms = 1000,
+});
 
-### 15. Language Bindings
-   15.1. [ ] Design Lua binding interface
-   15.2. [ ] Create example Lua scripts
-   15.3. [ ] Add binding documentation
+// Logging hook provides structured logging at each lifecycle point
+const logging_hook = try LoggingHook.init(allocator, .{
+    .level = .info,
+    .include_inputs = true,
+    .include_outputs = false,
+});
 
-## Phase 8: Event System and Output Parsing (Week 15)
+// Add hooks to agent config - works for both agents and workflows
+var agent_config = AgentConfig{
+    .hooks = &[_]Hook{ metrics_hook, logging_hook },
+};
 
-### 16. Event System - COMPLETED (See TODO-DONE.md)
+// Hooks automatically execute at lifecycle points (init, beforeRun, afterRun, etc.)
+```
 
-### 17. Output Parsing - COMPLETED (See TODO-DONE.md)
+## Phase 7: Memory Systems (Weeks 11-12) - PARTIALLY COMPLETE
 
-## Phase 9: Documentation and Examples
+### 16. Short-term Memory - COMPLETED (See TODO-DONE.md)
 
-### 18. Documentation
-   18.1. [ ] Implement docs/generator.zig for auto-generation
-   18.2. [ ] Create docs/templates.zig for output formats
-   18.3. [ ] Generate API reference documentation
-   18.4. [ ] Write architecture guide
-   18.5. [ ] Create user tutorials
-   18.6. [ ] Add inline code documentation
-   18.7. [ ] Create bridge development guide
+### 17. Long-term Memory (Future)
+   17.1. [ ] Design vector store interface - REVISIT
+   17.2. [ ] Add embedding generation support - REVISIT
+   17.3. [ ] Implement similarity search - REVISIT
 
-### 19. Examples
-   19.1. [ ] Create examples/basic_chat.zig
-   19.2. [ ] Update examples/basic_tool_usage.zig
-   19.3. [ ] Create examples/multi_agent.zig
-   19.4. [ ] Create examples/workflow_demo.zig
-   19.5. [ ] Create examples/event_monitoring.zig
-   19.6. [ ] Create examples/structured_output.zig
-   19.7. [ ] Create examples/c_api_demo.c
-   19.8. [ ] Create examples/lua/basic.lua
-   19.9. [ ] Create examples/lua/tools.lua
-   19.10. [ ] Create examples/lua/workflows.lua
+## Phase 8: C-API and Bindings (Weeks 13-14)
+
+### 18. C-API Implementation
+   18.1. [ ] Create C-API functions in bindings/capi.zig
+   18.2. [ ] Add memory management for C interface
+   18.3. [ ] Implement structured error handling for C-API
+   18.4. [ ] Create C header file generation
+   18.5. [ ] Add tool registration from external languages
+   18.6. [ ] Implement event subscription for C clients
+   18.7. [ ] Add type conversion helpers (to/from JSON)
+
+### 19. Language Bindings
+   19.1. [ ] Design Lua binding interface
+   19.2. [ ] Create example Lua scripts
+   19.3. [ ] Add binding documentation
+
+## Phase 9: Event System and Output Parsing (Week 15) - COMPLETED
+
+### 20. Event System - COMPLETED (See TODO-DONE.md)
+
+### 21. Output Parsing - COMPLETED (See TODO-DONE.md)
+
+## Phase 10: Documentation and Examples
+
+### 22. Documentation
+   22.1. [ ] Implement docs/generator.zig for auto-generation
+   22.2. [ ] Create docs/templates.zig for output formats
+   22.3. [ ] Generate API reference documentation
+   22.4. [ ] Write architecture guide
+   22.5. [ ] Create user tutorials
+   22.6. [ ] Add inline code documentation
+   22.7. [ ] Create bridge development guide
+
+### 23. Examples
+   23.1. [ ] Create examples/basic_chat.zig
+   23.2. [ ] Update examples/basic_tool_usage.zig
+   23.3. [ ] Create examples/multi_agent.zig
+   23.4. [ ] Create examples/workflow_demo.zig
+   23.5. [ ] Create examples/event_monitoring.zig
+   23.6. [ ] Create examples/structured_output.zig
+   23.7. [ ] Create examples/c_api_demo.c
+   23.8. [ ] Create examples/lua/basic.lua
+   23.9. [ ] Create examples/lua/tools.lua
+   23.10. [ ] Create examples/lua/workflows.lua
 
 ## Ongoing Tasks
 
-### 20. Quality Assurance
-   20.1. [ ] Maintain test coverage above 80%
-   20.2. [ ] Run performance benchmarks
-   20.3. [ ] Memory leak detection
-   20.4. [ ] Code review and refactoring
-   20.5. [ ] Test scenario coverage for all features
-   20.6. [ ] Bridge integration testing
+### 24. Quality Assurance
+   24.1. [ ] Maintain test coverage above 80%
+   24.2. [ ] Run performance benchmarks
+   24.3. [ ] Memory leak detection
+   24.4. [ ] Code review and refactoring
+   24.5. [ ] Test scenario coverage for all features
+   24.6. [ ] Bridge integration testing
 
-### 21. Community
-   21.1. [ ] Set up issue templates
-   21.2. [ ] Create contribution guidelines
-   21.3. [ ] Add code of conduct
-   21.4. [ ] Release planning
-   21.5. [ ] Create bridge developer community resources
+### 25. Community
+   25.1. [ ] Set up issue templates
+   25.2. [ ] Create contribution guidelines
+   25.3. [ ] Add code of conduct
+   25.4. [ ] Release planning
+   25.5. [ ] Create bridge developer community resources

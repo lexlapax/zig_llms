@@ -28,12 +28,16 @@
 ## Phase 10: Lua Scripting Engine (Weeks 16-18)
 
 ### 20. Lua Engine Research and Planning
-   20.1. [ ] Research Lua 5.4 C API integration with Zig
-   20.2. [ ] Analyze lua_State management and memory integration
-   20.3. [ ] Design ScriptValue ↔ Lua type conversion system
-   20.4. [ ] Plan coroutine integration for async operations
-   20.5. [ ] Design security sandboxing approach
+   20.1. [✅] Research Lua 5.4 C API integration with Zig and add additional TODO.md entries as needed
+   20.2. [✅] Analyze lua_State management and memory integration
+   20.3. [✅] Design ScriptValue ↔ Lua type conversion system
+   20.4. [✅] Plan coroutine integration for async operations
+   20.5. [✅] Design security sandboxing approach
    20.6. [ ] Create detailed implementation roadmap
+   20.7. [ ] Research Lua bytecode validation and security implications
+   20.8. [ ] Investigate Lua 5.4 warning system integration
+   20.9. [ ] Study Lua 5.4 generational GC vs incremental GC trade-offs
+   20.10. [ ] Research Lua debug introspection capabilities for development tools
 
 ### 21. Lua Core Integration
    21.1. [ ] Set up Lua library dependencies in build.zig
@@ -42,6 +46,10 @@
    21.4. [ ] Add Zig allocator integration with Lua memory management
    21.5. [ ] Implement basic script execution and error handling
    21.6. [ ] Create lua_pcall wrapper with proper error propagation
+   21.7. [ ] Implement lua_State pooling for performance
+   21.8. [ ] Add lua_State isolation mechanisms for multi-tenant scenarios
+   21.9. [ ] Create lua_State snapshots for rollback capabilities
+   21.10. [ ] Implement custom panic handler integration with Zig error handling
 
 ### 22. Lua Type System and Value Bridge
    22.1. [ ] Implement ScriptValue to lua_push* functions
@@ -51,6 +59,10 @@
    22.5. [ ] Add function reference handling and callbacks
    22.6. [ ] Implement userdata system for complex Zig types
    22.7. [ ] Add proper nil/null handling
+   22.8. [ ] Implement light userdata optimization for simple pointers
+   22.9. [ ] Add custom userdata type registry with version checking
+   22.10. [ ] Create bidirectional weak reference system
+   22.11. [ ] Implement automatic Zig struct serialization to Lua tables
 
 ### 23. Lua API Bridge Integration
    23.1. [ ] Create Lua C function wrappers for Agent Bridge
@@ -63,6 +75,10 @@
    23.8. [ ] Create Lua C function wrappers for Memory Bridge
    23.9. [ ] Create Lua C function wrappers for Hook Bridge
    23.10. [ ] Create Lua C function wrappers for Output Bridge
+   23.11. [ ] Create batched API call optimization layer
+   23.12. [ ] Implement stack pre-sizing strategies
+   23.13. [ ] Add function call memoization for frequently used bridges
+   23.14. [ ] Create bridge call profiling and metrics collection
 
 ### 24. Lua Advanced Features
    24.1. [ ] Implement coroutine support for async operations
@@ -71,6 +87,10 @@
    24.4. [ ] Implement debug hooks and introspection
    24.5. [ ] Add table traversal optimization
    24.6. [ ] Create weak reference system
+   24.7. [ ] Implement to-be-closed variables integration
+   24.8. [ ] Add const variable support where applicable
+   24.9. [ ] Integrate Lua 5.4 warning system with Zig logging
+   24.10. [ ] Implement new length operator optimizations
 
 ### 25. Lua Security and Sandboxing
    25.1. [ ] Implement restricted global environment
@@ -79,6 +99,10 @@
    25.4. [ ] Implement memory usage tracking and limits
    25.5. [ ] Create safe I/O operations
    25.6. [ ] Add resource usage monitoring
+   25.7. [ ] Create bytecode validator before execution
+   25.8. [ ] Implement capability-based security model
+   25.9. [ ] Add resource usage alerting system
+   25.10. [ ] Create security audit logging for all restricted operations
 
 ### 26. Lua Testing and Examples
    26.1. [ ] Create comprehensive Lua engine tests
@@ -87,13 +111,17 @@
    26.4. [ ] Add advanced Lua workflow examples
    26.5. [ ] Create Lua scripting best practices guide
    26.6. [ ] Add error handling and debugging examples
+   26.7. [ ] Create Lua-to-Zig error translation layer
+   26.8. [ ] Implement hot-reload support for development
+   26.9. [ ] Add Lua script debugging integration with IDE
+   26.10. [ ] Create performance profiling tools for Lua scripts
 
 ---
 
 ## Phase 11: QuickJS JavaScript Engine (Weeks 19-21)
 
 ### 27. QuickJS Engine Research and Planning
-   27.1. [ ] Research QuickJS C API and ES2020 features
+   27.1. [ ] Research QuickJS C API and ES2020 features and add additional TODO.md entries as needed
    27.2. [ ] Analyze JSContext/JSRuntime management
    27.3. [ ] Design Promise-based async API integration
    27.4. [ ] Plan ES6 module system integration
@@ -158,7 +186,7 @@
 ## Phase 12: Wren Scripting Engine (Weeks 22-24)
 
 ### 34. Wren Engine Research and Planning
-   34.1. [ ] Research Wren C API and fiber system
+   34.1. [ ] Research Wren C API and fiber system and add additional TODO.md entries as needed
    34.2. [ ] Analyze WrenVM management and configuration
    34.3. [ ] Design foreign class system integration
    34.4. [ ] Plan fiber-based concurrency model

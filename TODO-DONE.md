@@ -1,5 +1,53 @@
 # Completed Tasks for zig_llms
 
+## Phase 10: Lua Scripting Engine - IN PROGRESS
+
+### 20. Lua Engine Research and Planning - IN PROGRESS 2025-06-15
+- [x] 20.1. Research Lua 5.4 C API integration with Zig and add additional TODO.md entries as needed - Completed 2025-06-15
+- [x] 20.2. Analyze lua_State management and memory integration - Completed 2025-06-15
+  - Comprehensive analysis of lua_State lifecycle best practices
+  - Memory management integration between Lua GC and Zig allocators  
+  - Thread safety considerations and recommended patterns
+  - State isolation and sandboxing approaches for security
+  - Performance considerations for lua_State pooling
+  - Error handling and cleanup strategies
+  - Integration recommendations for zig_llms architecture
+  - Analysis document created: docs/lua_state_analysis.md
+- [x] 20.3. Design ScriptValue ↔ Lua type conversion system - Completed 2025-06-15
+  - Complete bidirectional type mapping between ScriptValue and Lua types
+  - Stack management strategy with LuaStackGuard for safety
+  - Table conversion logic with array vs object detection
+  - Function reference management with registry-based storage
+  - Userdata integration for complex Zig types
+  - Comprehensive error handling and conversion strategies
+  - Performance optimizations: stack pre-sizing, type caching, bulk operations
+  - Full integration design with existing API bridges
+  - Design document created: docs/lua_type_conversion_design.md
+- [x] 20.4. Plan coroutine integration for async operations - Completed 2025-06-15
+  - Comprehensive analysis of Lua 5.4 coroutine system (lua_newthread, lua_resume, lua_yield)
+  - Async/await integration patterns: Promise-like wrappers, event loop integration, continuation-based I/O
+  - Error handling strategies with lua_pcallk and protected mode execution
+  - Performance optimization: coroutine pooling, batch execution, resource monitoring
+  - Security integration with existing sandbox and resource limit framework
+  - Complete integration plan with existing hook system, event system, and ScriptValue conversion
+  - 4-phase implementation roadmap with practical milestones
+  - Lua script API design with familiar async/await patterns
+  - Design document created: docs/lua_coroutine_integration_plan.md
+- [x] 20.5. Design security sandboxing approach - Completed 2025-06-15
+  - Comprehensive threat analysis: environment pollution, bytecode injection, resource exhaustion, sandbox escapes
+  - Multi-layer security architecture: Engine-level policies, context-level monitoring, function-level controls
+  - Environment isolation strategy with custom environment tables and controlled access
+  - Bytecode security framework with validation and binary chunk blocking
+  - Resource management system: instruction counting, memory tracking, timeout enforcement
+  - Module loading security with whitelisting and custom loaders
+  - Metatable protection against common escape techniques
+  - String pattern safety with ReDoS prevention and complexity analysis
+  - Full integration with existing zig_llms SecurityPermissions and ScriptContext
+  - Performance optimization strategies: adaptive hooks, function caching, memory pools
+  - 4-phase implementation roadmap with comprehensive testing framework
+  - Security vulnerability test suite and performance benchmarks (<50% overhead target)
+  - Design document created: docs/lua_security_design.md
+
 ## Phase 9: Scripting Engine Interface Infrastructure - COMPLETED 2025-06-15
 
 ### 19. Scripting Engine Interface Core Infrastructure - COMPLETED 2025-06-15

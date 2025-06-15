@@ -1,5 +1,65 @@
 # Completed Tasks for zig_llms
 
+## Phase 4: Tool System - Built-in Tools - COMPLETED 2025-06-15
+
+### 9. Built-in Tools - COMPLETED
+- [x] 9.1. Create tools/file.zig for file operations - Completed 2025-06-15
+  - Comprehensive file operations tool with safety controls
+  - Read, write, copy, move, delete, and metadata operations
+  - Path traversal protection and sandboxing
+  - File type detection and content validation
+  - Directory operations with recursive support
+  - VTable pattern for polymorphic interface
+- [x] 9.2. Create tools/http.zig for HTTP requests - Completed 2025-06-15
+  - HTTP client tool with comprehensive request/response handling
+  - GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH methods
+  - Custom headers, authentication, and timeout support
+  - Response parsing (JSON, XML, text, binary)
+  - SSL/TLS validation and proxy support
+  - URL validation and content type handling
+- [x] 9.3. Create tools/system.zig for system information - Completed 2025-06-15
+  - System information gathering with safety controls
+  - OS, hardware, memory, CPU, disk, network, environment info
+  - Platform-specific implementations (Linux focus)
+  - Process, uptime, and load average monitoring
+  - Permission-based access control for sensitive data
+  - Cross-platform architecture detection
+- [x] 9.4. Create tools/data.zig for JSON/CSV/YAML/XML data manipulation - Completed 2025-06-15
+  - Data manipulation tool for multiple formats
+  - JSON and CSV parsing with full implementation
+  - Data validation, conversion, and transformation
+  - CSV field parsing with quote and escape handling
+  - JSON-to-CSV and CSV-to-JSON conversion
+  - Schema validation and safety controls
+- [x] 9.5. Create tools/process.zig for process execution - Completed 2025-06-15
+  - Secure process execution with safety controls
+  - Execute, spawn, shell, and script execution modes
+  - Command validation and argument sanitization
+  - Environment variable whitelisting
+  - Timeout handling and output capture
+  - Sandbox directory enforcement
+- [x] 9.6. Create tools/math.zig for mathematical calculation operations - Completed 2025-06-15
+  - Comprehensive math tool with arithmetic, statistics, trigonometry
+  - Binary operations (add, subtract, multiply, divide, power, modulo)
+  - Unary operations (sqrt, abs, floor, ceil, round, sin, cos, tan, log, exp)
+  - Statistical operations (mean, median, mode, variance, std_dev, min, max, sum)
+  - Array operations (sort, reverse, unique, count)
+  - Number type handling (integer/float union with automatic conversion)
+- [x] 9.7. Create tools/feed.zig for RSS, Atom, JSON Feed formats - Completed 2025-06-15
+  - Feed processing tool for multiple feed formats
+  - JSON Feed parsing with full implementation
+  - RSS and Atom format detection (placeholder parsing)
+  - Feed fetching with HTTP client integration
+  - Feed validation and metadata extraction
+  - Security controls for URL validation and size limits
+- [x] 9.8. Create tools/wrapper.zig for wrapping agents/workflows as tools - Completed 2025-06-15
+  - Agent and workflow wrapper tool for composition
+  - Synchronous, asynchronous, and streaming execution modes
+  - Execution context tracking with state management
+  - Agent and workflow polymorphic wrapping
+  - Timeout handling and result caching support
+  - VTable pattern integration with existing tool system
+
 ## Phase 6: Comprehensive Hook System - COMPLETED 2025-06-15
 
 ### 12. Hook Infrastructure - COMPLETED

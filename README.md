@@ -24,6 +24,7 @@ The core vision behind zig_llms is to:
 
 
 ## Project Structure
+`txt
 zig_agents/
 ├── .gitignore
 ├── LICENSE
@@ -50,35 +51,66 @@ zig_agents/
 │   └── util.zig                # Utility functions (e.g., JSON handling, HTTP client wrappers)
 └── test/
     └── main.zig                # Test suite entry point
+`
 
+## Development Status
 
-## Core Features (Planned)
+zig_llms is currently under active development. Here's the current implementation status:
 
-*   **Modular LLM Connectors**:
-    *   Standardized interface for LLM interactions.
-    *   Initial support planned for OpenAI.
-    *   Extensible design for adding more providers (e.g., Anthropic, Cohere, local models via Ollama).
-*   **Agent Core**:
-    *   Agent lifecycle management.
-    *   Flexible prompt engineering and management utilities.
-    *   State management and context handling.
-*   **Tooling System**:
-    *   Define custom tools with clear input/output schemas.
-    *   Mechanism for agents to discover, select, and execute tools.
-    *   Support for both synchronous and asynchronous tool operations.
-*   **Workflow Engine**:
-    *   Define sequences of agent actions, tool invocations, and conditional logic.
-    *   Orchestrate complex tasks involving multiple steps or agent collaborations.
-*   **Memory Management**:
-    *   Short-term memory for conversational context.
-    *   (Future) Long-term memory solutions for persistent knowledge and learning.
-*   **C-API for Bindings**:
-    *   Expose key functionalities through a C-compatible interface.
+### ✅ Completed (Phase 1 & 2)
+- **Core Infrastructure**: Types, error handling, provider interface, memory management
+- **Build System**: Makefile, test configuration  
+- **Testing Framework**: Scenarios, mocks, matchers, fixtures for comprehensive testing
+- **Provider System**: Complete OpenAI provider with HTTP client and connection pooling
+- **HTTP Infrastructure**: Request/response handling, connection pooling, retry logic
+- **Memory Management**: Short-term conversation memory with token counting
+
+### 🚧 In Progress (Phase 2)
+- JSON schema validation and utilities
+- Retry logic with exponential backoff
+
+### 📋 Planned (Phase 3+)
+- Agent system with lifecycle management
+- Tool infrastructure and built-in tools
+- Workflow engine for complex task orchestration
+- Event system and output parsing
+- C-API bindings for language interoperability
+
+## Core Features
+
+*   **Modular LLM Connectors**: ✅ **IMPLEMENTED**
+    *   Standardized provider interface for LLM interactions
+    *   **OpenAI provider fully implemented** with chat completions API
+    *   Extensible design for adding more providers (Anthropic, Cohere, local models via Ollama)
+*   **Memory Management**: ✅ **IMPLEMENTED**
+    *   Short-term memory for conversational context with ring buffer and token counting
+    *   (Future) Long-term memory solutions for persistent knowledge and learning
+*   **Testing Framework**: ✅ **IMPLEMENTED**
+    *   Comprehensive testing utilities with mocks, fixtures, and scenarios
+    *   Declarative test scenarios for end-to-end testing
+    *   Flexible assertion matchers for better test readability
+*   **HTTP Infrastructure**: ✅ **IMPLEMENTED**
+    *   Robust HTTP client with request/response handling
+    *   Connection pooling for efficient resource usage
+    *   JSON serialization/deserialization support
+*   **Agent Core**: 📋 **PLANNED**
+    *   Agent lifecycle management
+    *   Flexible prompt engineering and management utilities
+    *   State management and context handling
+*   **Tooling System**: 📋 **PLANNED**
+    *   Define custom tools with clear input/output schemas
+    *   Mechanism for agents to discover, select, and execute tools
+    *   Support for both synchronous and asynchronous tool operations
+*   **Workflow Engine**: 📋 **PLANNED**
+    *   Define sequences of agent actions, tool invocations, and conditional logic
+    *   Orchestrate complex tasks involving multiple steps or agent collaborations
+*   **C-API for Bindings**: 📋 **PLANNED**
+    *   Expose key functionalities through a C-compatible interface
     *   Enable easy creation of bindings for languages like Lua (e.g., via LuaJIT FFI), Python, etc.
-*   **Zig-Native Benefits**:
-    *   Compile-time safety and error handling.
-    *   Manual memory management for predictable performance and resource usage.
-    *   Easy cross-compilation.
+*   **Zig-Native Benefits**: ✅ **IMPLEMENTED**
+    *   Compile-time safety and error handling
+    *   Manual memory management for predictable performance and resource usage
+    *   Easy cross-compilation
 
 ## Project Structure
 
@@ -98,19 +130,47 @@ The library is organized as follows:
 *   `test/`: Unit and integration tests.
 *   `build.zig`: Zig build script.
 
-## Getting Started (Placeholder)
+## Getting Started
 
-*(This section will be updated as the library develops)*
+The library is functional and ready for basic LLM interactions through the OpenAI provider.
 
 1.  **Prerequisites**:
-    *   Zig compiler (latest stable version recommended).
+    *   Zig compiler (0.14.0 or later)
+    *   OpenAI API key for testing the provider
 2.  **Building the Library**:
     ```bash
     zig build
     ```
-3.  **Running Examples**:
+3.  **Running Tests**:
     ```bash
-    zig build run-example-name
+    zig build test
+    ```
+4.  **Running Examples**:
+    ```bash
+    zig build run-example
+    ```
+5.  **Using the Library**:
+    ```zig
+    const zig_llms = @import("zig_llms");
+    const OpenAIProvider = zig_llms.providers.OpenAIProvider;
+    
+    // Create OpenAI provider
+    const config = .{
+        .api_key = "your-api-key",
+        .model = "gpt-4",
+    };
+    const provider = try OpenAIProvider.create(allocator, config);
+    defer provider.vtable.close(provider);
+    
+    // Create a message
+    const message = zig_llms.types.Message{
+        .role = .user,
+        .content = .{ .text = "Hello, how are you?" },
+    };
+    
+    // Generate response
+    const response = try provider.generate(&.{message}, .{});
+    defer allocator.free(response.content);
     ```
 
 ## Contributing

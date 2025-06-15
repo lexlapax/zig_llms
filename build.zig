@@ -23,12 +23,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    example_exe.root_module.addImport("zig_llms", lib.root_module);
     example_exe.linkLibrary(lib);
     b.installArtifact(example_exe);
 
     const run_example_cmd = b.addRunArtifact(example_exe);
     const run_step = b.step("run-example", "Run the basic_tool_usage example");
     run_step.dependOn(&run_example_cmd.step);
+    
+    // Retry example
+    const retry_example = b.addExecutable(.{
+        .name = "retry_example",
+        .root_source_file = b.path("examples/retry_example.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    retry_example.root_module.addImport("zig_llms", lib.root_module);
+    retry_example.linkLibrary(lib);
+    b.installArtifact(retry_example);
+    
+    const run_retry_cmd = b.addRunArtifact(retry_example);
+    const run_retry_step = b.step("run-retry-example", "Run the retry example");
+    run_retry_step.dependOn(&run_retry_cmd.step);
 
     // Tests
     const main_tests = b.addTest(.{

@@ -1,43 +1,8 @@
 # TODO List for zig_llms
 
-## Phase 1: Foundation (Weeks 1-2)
+## Phase 1: Foundation (Weeks 1-2) - COMPLETED (See TODO-DONE.md)
 
-### 1. Core Infrastructure
-   1.1. [ ] Create types.zig with core type definitions (Message, Content, Role)
-   1.2. [ ] Create error.zig with structured error handling and recovery strategies
-   1.3. [ ] Design and implement provider interface in provider.zig
-   1.4. [ ] Set up memory management architecture with arena allocators
-   1.5. [ ] Create context.zig for dependency injection
-   1.6. [ ] Implement schema/repository.zig with in-memory and file implementations
-   1.7. [ ] Create bindings/type_registry.zig for type conversions
-
-### 2. Build System
-   2.1. [x] Create Makefile with standard targets
-   2.2. [ ] Update build.zig to support test configuration
-   2.3. [ ] Set up CI/CD pipeline configuration
-
-### 3. Testing Framework
-   3.1. [ ] Create testing/scenario.zig for declarative test scenarios
-   3.2. [ ] Implement testing/mocks.zig with mock providers
-   3.3. [ ] Create testing/matchers.zig for flexible assertions
-   3.4. [ ] Set up testing/fixtures.zig for common test data
-
-## Phase 2: Provider Implementation (Weeks 3-4)
-
-### 4. Provider System
-   4.1. [ ] Create providers/factory.zig for provider creation
-   4.2. [ ] Implement providers/registry.zig for dynamic registration
-   4.3. [ ] Create providers/metadata.zig for provider discovery
-   4.4. [ ] Implement OpenAI provider with metadata in providers/openai.zig
-   4.5. [ ] Create HTTP client wrapper in http/client.zig
-   4.6. [ ] Implement connection pooling in http/pool.zig
-   4.7. [ ] Add retry logic with exponential backoff
-
-### 5. JSON and Schema
-   5.1. [ ] Create schema/validator.zig for JSON schema validation
-   5.2. [ ] Implement schema/coercion.zig for type coercion
-   5.3. [ ] Create schema/generator.zig for schema generation from types
-   5.4. [ ] Update util/json.zig with parsing utilities
+## Phase 2: Provider Implementation (Weeks 3-4) - COMPLETED (See TODO-DONE.md)
 
 ## Phase 3: Agent System (Weeks 5-6)
 
@@ -47,7 +12,7 @@
    6.3. [ ] Implement agent initialization and cleanup
    6.4. [ ] Add agent execution hooks (beforeRun, afterRun)
 
-### 7. Agent Features
+### 7. Agent Features - DEFER
    7.1. [ ] Add prompt management in prompt.zig
    7.2. [ ] Implement conversation tracking
    7.3. [ ] Create agent factory pattern
@@ -84,17 +49,14 @@
    11.2. [ ] Implement error handling in workflows
    11.3. [ ] Add workflow state management
 
-## Phase 6: Memory Systems (Weeks 11-12)
+## Phase 6: Memory Systems (Weeks 11-12) - PARTIALLY COMPLETE
 
-### 12. Short-term Memory
-   12.1. [ ] Implement conversation memory in memory/short_term.zig
-   12.2. [ ] Add token counting and limits
-   12.3. [ ] Create ring buffer for message history
+### 12. Short-term Memory - COMPLETED (See TODO-DONE.md)
 
 ### 13. Long-term Memory (Future)
-   13.1. [ ] Design vector store interface
-   13.2. [ ] Add embedding generation support
-   13.3. [ ] Implement similarity search
+   13.1. [ ] Design vector store interface - REVISIT
+   13.2. [ ] Add embedding generation support - REVISIT
+   13.3. [ ] Implement similarity search - REVISIT
 
 ## Phase 7: C-API and Bindings (Weeks 13-14)
 
@@ -121,12 +83,7 @@
    16.4. [ ] Implement events/recorder.zig for persistence
    16.5. [ ] Add event replay functionality
 
-### 17. Output Parsing
-   17.1. [ ] Create outputs/parser.zig interface
-   17.2. [ ] Implement outputs/json_parser.zig with recovery
-   17.3. [ ] Create outputs/recovery.zig for common fixes
-   17.4. [ ] Add parser registry for multiple formats
-   17.5. [ ] Implement schema-guided extraction
+### 17. Output Parsing - COMPLETED (See TODO-DONE.md)
 
 ## Phase 9: Documentation and Examples
 

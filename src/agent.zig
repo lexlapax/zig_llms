@@ -5,6 +5,9 @@ const std = @import("std");
 const types = @import("types.zig");
 const State = @import("state.zig").State;
 const RunContext = @import("context.zig").RunContext;
+const hook_types = @import("hooks/types.zig");
+const hook_context = @import("hooks/context.zig");
+const hook_registry = @import("hooks/registry.zig");
 
 pub const Agent = struct {
     vtable: *const VTable,
@@ -64,6 +67,7 @@ pub const BaseAgent = struct {
     description: []const u8,
     config: AgentConfig,
     context: ?*RunContext,
+    hook_executor: ?*hook_registry.HookExecutor,
     allocator: std.mem.Allocator,
     
     const vtable = Agent.VTable{
@@ -103,9 +107,38 @@ pub const BaseAgent = struct {
         self.allocator.destroy(self);
     }
     
+    // Execute hooks for a given point
+    fn executeHooks(self: *BaseAgent, point: hook_types.HookPoint, data: ?std.json.Value) !?hook_types.HookResult {
+        if (self.context == null) return null;
+        
+        // Get hook registry from context
+        const registry = self.context.?.getService(hook_registry.HookRegistry) catch return null;
+        if (registry == null) return null;
+        
+        // Get hook executor for this point
+        var executor = registry.?.getHooksForPoint(point) catch return null;
+        self.hook_executor = &executor;
+        defer self.hook_executor = null;
+        
+        // Create hook context
+        var ctx = hook_context.EnhancedHookContext.init(self.allocator, point, self.context.?) catch return null;
+        defer ctx.deinit();
+        
+        ctx.base.agent = &self.agent;
+        ctx.base.input_data = data;
+        
+        // Execute hooks
+        return try executor.execute(&ctx.base);
+    }
+    
     fn baseInitialize(agent: *Agent, context: *RunContext) anyerror!void {
         const self: *BaseAgent = @fieldParentPtr("agent", agent);
         self.context = context;
+        
+        // Execute initialization hooks
+        if (try self.executeHooks(.agent_init, null)) |result| {
+            if (!result.continue_processing) return;
+        }
         
         // Store initialization metadata
         try agent.state.metadata.put("initialized_at", .{ .integer = std.time.timestamp() });
@@ -113,8 +146,16 @@ pub const BaseAgent = struct {
     }
     
     fn baseBeforeRun(agent: *Agent, input: std.json.Value) anyerror!std.json.Value {
-        // Base implementation - can be overridden
-        _ = agent;
+        const self: *BaseAgent = @fieldParentPtr("agent", agent);
+        
+        // Execute before-run hooks
+        if (try self.executeHooks(.agent_before_run, input)) |result| {
+            if (!result.continue_processing) {
+                return result.modified_data orelse input;
+            }
+            return result.modified_data orelse input;
+        }
+        
         return input;
     }
     
@@ -126,13 +167,24 @@ pub const BaseAgent = struct {
     }
     
     fn baseAfterRun(agent: *Agent, output: std.json.Value) anyerror!std.json.Value {
-        // Base implementation - can be overridden
-        _ = agent;
+        const self: *BaseAgent = @fieldParentPtr("agent", agent);
+        
+        // Execute after-run hooks
+        if (try self.executeHooks(.agent_after_run, output)) |result| {
+            if (!result.continue_processing) {
+                return result.modified_data orelse output;
+            }
+            return result.modified_data orelse output;
+        }
+        
         return output;
     }
     
     fn baseCleanup(agent: *Agent) void {
         const self: *BaseAgent = @fieldParentPtr("agent", agent);
+        
+        // Execute cleanup hooks
+        _ = self.executeHooks(.agent_cleanup, null) catch {};
         
         // Clear context reference
         self.context = null;
@@ -295,6 +347,7 @@ pub const AgentConfig = struct {
     enable_logging: bool = true,
     enable_caching: bool = true,
     metadata: ?std.json.ObjectMap = null,
+    hooks: ?[]const *hook_types.Hook = null,
 };
 
 // Agent lifecycle management

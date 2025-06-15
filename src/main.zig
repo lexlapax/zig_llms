@@ -119,6 +119,9 @@ pub const outputs = struct {
     pub const extractor = @import("outputs/extractor.zig");
 };
 
+// Event system
+pub const events = @import("events.zig");
+
 // Utilities
 pub const util = @import("util.zig");
 

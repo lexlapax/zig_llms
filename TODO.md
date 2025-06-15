@@ -60,12 +60,7 @@
 
 ## Phase 8: Event System and Output Parsing (Week 15)
 
-### 16. Event System
-   16.1. [ ] Create events/types.zig with serializable events
-   16.2. [ ] Implement events/emitter.zig with pattern matching
-   16.3. [ ] Create events/filter.zig for event filtering
-   16.4. [ ] Implement events/recorder.zig for persistence
-   16.5. [ ] Add event replay functionality
+### 16. Event System - COMPLETED (See TODO-DONE.md)
 
 ### 17. Output Parsing - COMPLETED (See TODO-DONE.md)
 

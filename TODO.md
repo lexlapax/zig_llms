@@ -33,7 +33,7 @@
    20.3. [✅] Design ScriptValue ↔ Lua type conversion system
    20.4. [✅] Plan coroutine integration for async operations
    20.5. [✅] Design security sandboxing approach
-   20.6. [ ] Create detailed implementation roadmap
+   20.6. [✅] Create detailed implementation roadmap
    20.7. [ ] Research Lua bytecode validation and security implications
    20.8. [ ] Investigate Lua 5.4 warning system integration
    20.9. [ ] Study Lua 5.4 generational GC vs incremental GC trade-offs

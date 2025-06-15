@@ -97,8 +97,8 @@ zig_llms is a lightweight LLM agent framework inspired by go-llms and Google's A
   - Output Bridge: Parsing, recovery, format detection, validation
 
 ### 🚧 Phase 10: Lua Scripting Engine (In Progress)
-**Current Status**: Task 20.5 completed - Security sandboxing approach design
-**Next Task**: 20.6 - Create detailed implementation roadmap
+**Current Status**: Task 20.6 completed - Detailed implementation roadmap created
+**Next Task**: 20.7 - Research Lua bytecode validation and security implications
 
 **Progress**: 
 - ✅ 20.1: Lua 5.4 C API integration research completed
@@ -106,7 +106,8 @@ zig_llms is a lightweight LLM agent framework inspired by go-llms and Google's A
 - ✅ 20.3: ScriptValue ↔ Lua type conversion system design completed (documented in `docs/lua_type_conversion_design.md`)
 - ✅ 20.4: Coroutine integration planning completed (documented in `docs/lua_coroutine_integration_plan.md`)
 - ✅ 20.5: Security sandboxing approach design completed (documented in `docs/lua_security_design.md`)
-- 🔄 20.6: Create detailed implementation roadmap (ready to start)
+- ✅ 20.6: Implementation roadmap created (documented in `docs/lua_engine_implementation_roadmap.md`)
+- 🔄 20.7: Research Lua bytecode validation and security implications (ready to start)
 
 **Completed Research**: Comprehensive analysis of Lua integration patterns, memory management strategies, thread safety, sandboxing, and performance optimization approaches aligned with Zig's memory management philosophy.
 

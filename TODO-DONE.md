@@ -1,5 +1,16 @@
 # Completed Tasks for zig_llms
 
+## Phase 5: Workflow Engine - Completed 2025-06-15
+
+### 10. Workflow Patterns - COMPLETED
+- [x] 10.1. Create workflow/definition.zig for serializable workflows - Completed 2025-06-15
+- [x] 10.2. Implement workflow/serialization.zig for JSON/YAML support - Completed 2025-06-15
+- [x] 10.3. Implement workflow/sequential.zig - Completed 2025-06-15
+- [x] 10.4. Implement workflow/parallel.zig with thread pool - Completed 2025-06-15
+- [x] 10.5. Implement workflow/conditional.zig - Completed 2025-06-15
+- [x] 10.6. Implement workflow/loop.zig - Completed 2025-06-15
+- [x] 10.7. Create workflow/script_step.zig for script integration - Completed 2025-06-15
+
 ## Initial Planning Phase
 
 ### Build System

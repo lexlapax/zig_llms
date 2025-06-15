@@ -64,6 +64,15 @@ pub const tools = struct {
 
 // Workflow system
 pub const workflow = @import("workflow.zig");
+pub const workflows = struct {
+    pub const definition = @import("workflow/definition.zig");
+    pub const serialization = @import("workflow/serialization.zig");
+    pub const sequential = @import("workflow/sequential.zig");
+    pub const parallel = @import("workflow/parallel.zig");
+    pub const conditional = @import("workflow/conditional.zig");
+    pub const loop = @import("workflow/loop.zig");
+    pub const script_step = @import("workflow/script_step.zig");
+};
 
 // Memory system
 pub const memory = @import("memory.zig");

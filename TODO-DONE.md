@@ -730,3 +730,16 @@
   - Integration with LuaWrapper via initWithCustomAllocator
   - Modified ManagedLuaState to use custom allocator
   - Created comprehensive tests and examples
+
+- [x] 21.5. Implement basic script execution and error handling - Completed 2025-06-16
+  - Created lua_execution.zig with comprehensive execution support
+  - Implemented LuaExecutor with error handling and stack management
+  - Added ExecutionOptions for configuration (bytecode, timeouts, stack traces)
+  - Created ExecutionResult with performance metrics
+  - Implemented LuaErrorInfo with detailed error reporting
+  - Added script execution, file execution, and function calls
+  - Created lua_value_converter.zig for bidirectional type conversion
+  - Handles all Lua types including tables, functions, and userdata
+  - Integrated execution with LuaEngine's executeScript and executeFunction
+  - Created comprehensive examples demonstrating all features
+  - Added tests for execution and value conversion

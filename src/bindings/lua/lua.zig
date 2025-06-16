@@ -19,6 +19,21 @@ pub const c = if (lua_enabled) @cImport({
     pub const lua_Number = f64;
     pub const lua_Integer = i64;
     pub const lua_CFunction = *const fn (?*lua_State) callconv(.C) c_int;
+    pub const lua_Debug = extern struct {
+        event: c_int,
+        name: ?[*:0]const u8,
+        namewhat: ?[*:0]const u8,
+        what: ?[*:0]const u8,
+        source: ?[*:0]const u8,
+        currentline: c_int,
+        linedefined: c_int,
+        lastlinedefined: c_int,
+        nups: u8,
+        nparams: u8,
+        isvararg: u8,
+        istailcall: u8,
+        short_src: [60]u8,
+    };
 };
 
 // Lua constants
@@ -57,6 +72,9 @@ pub const LUA_GCINC = 11;
 // Registry and globals indices
 pub const LUA_REGISTRYINDEX = -10000;
 pub const LUA_GLOBALSINDEX = -10002;
+
+// Return values for lua_pcall
+pub const LUA_MULTRET = -1;
 
 // Type aliases for cleaner Zig code
 pub const LuaState = if (lua_enabled) *c.lua_State else *c.lua_State;
@@ -284,6 +302,11 @@ pub const LuaWrapper = struct {
     pub fn pushCFunction(self: *LuaWrapper, func: LuaCFunction) void {
         if (!lua_enabled) return;
         c.lua_pushcfunction(self.state, func);
+    }
+
+    pub fn pushValue(self: *LuaWrapper, index: c_int) void {
+        if (!lua_enabled) return;
+        c.lua_pushvalue(self.state, index);
     }
 
     // Get values

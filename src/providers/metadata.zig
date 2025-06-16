@@ -42,14 +42,14 @@ pub const ProviderMetadata = struct {
     models: []const ModelInfo,
     constraints: Constraints,
     config_schema: ?*const Schema = null,
-    
+
     pub fn hasCapability(self: *const ProviderMetadata, capability: Capability) bool {
         for (self.capabilities) |cap| {
             if (cap == capability) return true;
         }
         return false;
     }
-    
+
     pub fn getModel(self: *const ProviderMetadata, model_id: []const u8) ?ModelInfo {
         for (self.models) |model| {
             if (std.mem.eql(u8, model.id, model_id)) {
@@ -58,15 +58,15 @@ pub const ProviderMetadata = struct {
         }
         return null;
     }
-    
+
     pub fn supportsStreaming(self: *const ProviderMetadata) bool {
         return self.hasCapability(.streaming);
     }
-    
+
     pub fn supportsFunctions(self: *const ProviderMetadata) bool {
         return self.hasCapability(.function_calling);
     }
-    
+
     pub fn supportsVision(self: *const ProviderMetadata) bool {
         return self.hasCapability(.vision);
     }

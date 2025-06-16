@@ -149,6 +149,20 @@ pub fn build(b: *std.Build) void {
         const run_lua_execution = b.addRunArtifact(lua_execution_example);
         const run_lua_execution_step = b.step("run-lua-execution", "Run the Lua script execution demo");
         run_lua_execution_step.dependOn(&run_lua_execution.step);
+        
+        // Add Lua pcall demo
+        const lua_pcall_example = b.addExecutable(.{
+            .name = "lua_pcall_demo",
+            .root_source_file = b.path("examples/lua_pcall_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        lua_pcall_example.root_module.addImport("zig_llms", lib.root_module);
+        lua_pcall_example.linkLibrary(lib);
+        
+        const run_lua_pcall = b.addRunArtifact(lua_pcall_example);
+        const run_lua_pcall_step = b.step("run-lua-pcall", "Run the Lua protected call demo");
+        run_lua_pcall_step.dependOn(&run_lua_pcall.step);
     }
 }
 

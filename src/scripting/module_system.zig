@@ -11,13 +11,13 @@ const ScriptingEngine = @import("interface.zig").ScriptingEngine;
 pub const APIBridge = struct {
     /// Module name (e.g., "agent", "tool", "workflow")
     name: []const u8,
-    
+
     /// Get the module definition
     getModule: *const fn (allocator: std.mem.Allocator) anyerror!*ScriptModule,
-    
+
     /// Initialize the bridge (register native functions, etc.)
     init: *const fn (engine: *ScriptingEngine, context: *ScriptContext) anyerror!void,
-    
+
     /// Cleanup
     deinit: *const fn () void,
 };
@@ -26,13 +26,13 @@ pub const APIBridge = struct {
 pub const ModuleLoaderConfig = struct {
     /// Enable lazy loading of modules
     lazy_loading: bool = true,
-    
+
     /// Enable module caching
     caching: bool = true,
-    
+
     /// Module path prefixes
     path_prefixes: []const []const u8 = &[_][]const u8{"zigllms"},
-    
+
     /// Auto-import these modules into every context
     auto_imports: []const []const u8 = &[_][]const u8{},
 };
@@ -40,22 +40,22 @@ pub const ModuleLoaderConfig = struct {
 /// Module system manager
 pub const ModuleSystem = struct {
     const Self = @This();
-    
+
     /// Registered API bridges
     bridges: std.StringHashMap(*const APIBridge),
-    
+
     /// Loaded modules cache
     module_cache: std.StringHashMap(*ScriptModule),
-    
+
     /// Configuration
     config: ModuleLoaderConfig,
-    
+
     /// Allocator
     allocator: std.mem.Allocator,
-    
+
     /// Mutex for thread safety
     mutex: std.Thread.Mutex,
-    
+
     pub fn init(allocator: std.mem.Allocator, config: ModuleLoaderConfig) Self {
         return Self{
             .bridges = std.StringHashMap(*const APIBridge).init(allocator),
@@ -65,11 +65,11 @@ pub const ModuleSystem = struct {
             .mutex = std.Thread.Mutex{},
         };
     }
-    
+
     pub fn deinit(self: *Self) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Clean up bridges
         var bridge_iter = self.bridges.iterator();
         while (bridge_iter.next()) |entry| {
@@ -77,7 +77,7 @@ pub const ModuleSystem = struct {
             entry.value_ptr.*.deinit();
         }
         self.bridges.deinit();
-        
+
         // Clean up cached modules
         var module_iter = self.module_cache.iterator();
         while (module_iter.next()) |entry| {
@@ -86,106 +86,106 @@ pub const ModuleSystem = struct {
         }
         self.module_cache.deinit();
     }
-    
+
     /// Register an API bridge
     pub fn registerBridge(self: *Self, bridge: *const APIBridge) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const owned_name = try self.allocator.dupe(u8, bridge.name);
         try self.bridges.put(owned_name, bridge);
     }
-    
+
     /// Generate all bindings for an engine
     pub fn generateBindings(self: *Self, engine: *ScriptingEngine, context: *ScriptContext) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Register all API bridges
         var iter = self.bridges.iterator();
         while (iter.next()) |entry| {
             const bridge = entry.value_ptr.*;
-            
+
             // Get or create module
             const module = if (self.config.caching) blk: {
                 if (self.module_cache.get(bridge.name)) |cached| {
                     break :blk cached;
                 }
-                
+
                 const new_module = try bridge.getModule(self.allocator);
                 const owned_name = try self.allocator.dupe(u8, bridge.name);
                 try self.module_cache.put(owned_name, new_module);
                 break :blk new_module;
             } else try bridge.getModule(self.allocator);
-            
+
             // Build full module name
             const full_name = try std.fmt.allocPrint(self.allocator, "{s}.{s}", .{
                 self.config.path_prefixes[0],
                 bridge.name,
             });
             defer self.allocator.free(full_name);
-            
+
             // Create wrapper module with full name
             const wrapper = try self.allocator.create(ScriptModule);
             wrapper.* = module.*;
             wrapper.name = full_name;
-            
+
             // Register module with engine
             try engine.registerModule(context, wrapper);
-            
+
             // Initialize bridge
             try bridge.init(engine, context);
         }
-        
+
         // Auto-import modules if configured
         for (self.config.auto_imports) |module_name| {
             try engine.vtable.importModule(context, module_name);
         }
     }
-    
+
     /// Load a specific module
     pub fn loadModule(self: *Self, engine: *ScriptingEngine, context: *ScriptContext, module_name: []const u8) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Parse module name (e.g., "zigllms.agent" -> "agent")
         var parts = std.mem.tokenize(u8, module_name, ".");
         _ = parts.next(); // Skip prefix
         const bridge_name = parts.next() orelse return error.InvalidModuleName;
-        
+
         const bridge = self.bridges.get(bridge_name) orelse return error.ModuleNotFound;
-        
+
         // Get or create module
         const module = if (self.config.caching) blk: {
             if (self.module_cache.get(bridge_name)) |cached| {
                 break :blk cached;
             }
-            
+
             const new_module = try bridge.getModule(self.allocator);
             const owned_name = try self.allocator.dupe(u8, bridge_name);
             try self.module_cache.put(owned_name, new_module);
             break :blk new_module;
         } else try bridge.getModule(self.allocator);
-        
+
         // Create wrapper with full name
         const wrapper = try self.allocator.create(ScriptModule);
         wrapper.* = module.*;
         wrapper.name = module_name;
-        
+
         // Register and initialize
         try engine.registerModule(context, wrapper);
         try bridge.init(engine, context);
     }
-    
+
     /// List available modules
     pub fn listModules(self: *Self, allocator: std.mem.Allocator) ![][]const u8 {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         var list = try allocator.alloc([]const u8, self.bridges.count());
         var iter = self.bridges.iterator();
         var i: usize = 0;
-        
+
         while (iter.next()) |entry| {
             list[i] = try std.fmt.allocPrint(allocator, "{s}.{s}", .{
                 self.config.path_prefixes[0],
@@ -193,7 +193,7 @@ pub const ModuleSystem = struct {
             });
             i += 1;
         }
-        
+
         return list;
     }
 };
@@ -202,7 +202,7 @@ pub const ModuleSystem = struct {
 pub fn registerAllBridges(module_system: *ModuleSystem) !void {
     // These will be implemented in their respective files
     // For now, we'll create placeholder registrations
-    
+
     const bridges = [_]struct {
         name: []const u8,
         file: []const u8,
@@ -218,10 +218,10 @@ pub fn registerAllBridges(module_system: *ModuleSystem) !void {
         .{ .name = "hook", .file = "hook_bridge.zig" },
         .{ .name = "output", .file = "output_bridge.zig" },
     };
-    
+
     _ = module_system;
     _ = bridges;
-    
+
     // TODO: Import and register each bridge when implemented
 }
 
@@ -238,7 +238,7 @@ pub fn createModuleFunction(
             return func(args);
         }
     }.callback;
-    
+
     return ScriptModule.FunctionDef{
         .name = name,
         .arity = arity,
@@ -264,10 +264,10 @@ pub fn createModuleConstant(
 test "ModuleSystem initialization" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var module_system = ModuleSystem.init(allocator, .{});
     defer module_system.deinit();
-    
+
     // Test with no bridges registered
     const modules = try module_system.listModules(allocator);
     defer allocator.free(modules);
@@ -277,10 +277,10 @@ test "ModuleSystem initialization" {
 test "ModuleSystem bridge registration" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var module_system = ModuleSystem.init(allocator, .{});
     defer module_system.deinit();
-    
+
     // Create mock bridge
     const mock_bridge = struct {
         const bridge = APIBridge{
@@ -289,7 +289,7 @@ test "ModuleSystem bridge registration" {
             .init = init,
             .deinit = deinit,
         };
-        
+
         fn getModule(alloc: std.mem.Allocator) anyerror!*ScriptModule {
             const module = try alloc.create(ScriptModule);
             module.* = ScriptModule{
@@ -318,17 +318,17 @@ test "ModuleSystem bridge registration" {
             };
             return module;
         }
-        
+
         fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
             _ = engine;
             _ = context;
         }
-        
+
         fn deinit() void {}
     };
-    
+
     try module_system.registerBridge(&mock_bridge.bridge);
-    
+
     const modules = try module_system.listModules(allocator);
     defer {
         for (modules) |module| {
@@ -336,14 +336,14 @@ test "ModuleSystem bridge registration" {
         }
         allocator.free(modules);
     }
-    
+
     try testing.expectEqual(@as(usize, 1), modules.len);
     try testing.expectEqualStrings("zigllms.test", modules[0]);
 }
 
 test "createModuleFunction helper" {
     const testing = std.testing;
-    
+
     const func_def = createModuleFunction(
         "add",
         "Add two numbers",
@@ -351,24 +351,24 @@ test "createModuleFunction helper" {
         struct {
             fn add(args: []const ScriptValue) anyerror!ScriptValue {
                 if (args.len != 2) return error.InvalidArguments;
-                
+
                 const a = switch (args[0]) {
                     .integer => |i| @as(f64, @floatFromInt(i)),
                     .number => |n| n,
                     else => return error.TypeMismatch,
                 };
-                
+
                 const b = switch (args[1]) {
                     .integer => |i| @as(f64, @floatFromInt(i)),
                     .number => |n| n,
                     else => return error.TypeMismatch,
                 };
-                
+
                 return ScriptValue{ .number = a + b };
             }
         }.add,
     );
-    
+
     try testing.expectEqualStrings("add", func_def.name);
     try testing.expectEqual(@as(?u8, 2), func_def.arity);
     try testing.expectEqualStrings("Add two numbers", func_def.description);

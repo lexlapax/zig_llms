@@ -9,17 +9,17 @@ const EventSeverity = types.EventSeverity;
 
 // Filter operators
 pub const FilterOp = enum {
-    eq,     // Equal
-    ne,     // Not equal
-    gt,     // Greater than
-    gte,    // Greater than or equal
-    lt,     // Less than
-    lte,    // Less than or equal
+    eq, // Equal
+    ne, // Not equal
+    gt, // Greater than
+    gte, // Greater than or equal
+    lt, // Less than
+    lte, // Less than or equal
     contains,
     starts_with,
     ends_with,
     matches, // Pattern match
-    in,     // In list
+    in, // In list
     not_in, // Not in list
 };
 
@@ -57,7 +57,7 @@ pub const FilterCondition = struct {
     op: FilterOp,
     value: FilterValue,
     field_path: ?[]const u8 = null, // For payload_field and metadata_field
-    
+
     pub fn matches(self: *const FilterCondition, event: *const Event) bool {
         return switch (self.field) {
             .id => self.matchString(event.id),
@@ -74,7 +74,7 @@ pub const FilterCondition = struct {
             .metadata_field => self.matchJsonField(event.metadata.custom orelse .{ .null = {} }, self.field_path),
         };
     }
-    
+
     fn matchString(self: *const FilterCondition, value: []const u8) bool {
         return switch (self.value) {
             .string => |filter_str| switch (self.op) {
@@ -104,15 +104,15 @@ pub const FilterCondition = struct {
             else => false,
         };
     }
-    
+
     fn matchOptionalString(self: *const FilterCondition, value: ?[]const u8) bool {
         if (value) |str| {
             return self.matchString(str);
         }
-        return self.op == .eq and self.value == .string and 
-               std.mem.eql(u8, self.value.string, "");
+        return self.op == .eq and self.value == .string and
+            std.mem.eql(u8, self.value.string, "");
     }
-    
+
     fn matchCategory(self: *const FilterCondition, value: EventCategory) bool {
         return switch (self.value) {
             .category => |cat| switch (self.op) {
@@ -131,7 +131,7 @@ pub const FilterCondition = struct {
             else => false,
         };
     }
-    
+
     fn matchSeverity(self: *const FilterCondition, value: EventSeverity) bool {
         return switch (self.value) {
             .severity => |sev| switch (self.op) {
@@ -154,7 +154,7 @@ pub const FilterCondition = struct {
             else => false,
         };
     }
-    
+
     fn matchInteger(self: *const FilterCondition, value: i64) bool {
         return switch (self.value) {
             .integer => |int| switch (self.op) {
@@ -169,7 +169,7 @@ pub const FilterCondition = struct {
             else => false,
         };
     }
-    
+
     fn matchTags(self: *const FilterCondition, tags: []const []const u8) bool {
         return switch (self.value) {
             .string => |str| switch (self.op) {
@@ -201,14 +201,14 @@ pub const FilterCondition = struct {
             else => false,
         };
     }
-    
+
     fn matchJsonField(self: *const FilterCondition, json: std.json.Value, path: ?[]const u8) bool {
         const field_path = path orelse return false;
-        
+
         // Navigate JSON path
         var current = json;
         var iter = std.mem.tokenize(u8, field_path, ".");
-        
+
         while (iter.next()) |segment| {
             switch (current) {
                 .object => |obj| {
@@ -217,7 +217,7 @@ pub const FilterCondition = struct {
                 else => return false,
             }
         }
-        
+
         // Match the value
         return switch (current) {
             .string => |str| switch (self.value) {
@@ -265,7 +265,7 @@ pub const FilterExpression = union(enum) {
         right: *FilterExpression,
     },
     not_expr: *FilterExpression,
-    
+
     pub fn matches(self: *const FilterExpression, event: *const Event) bool {
         return switch (self.*) {
             .condition => |*cond| cond.matches(event),
@@ -274,7 +274,7 @@ pub const FilterExpression = union(enum) {
             .not_expr => |expr| !expr.matches(event),
         };
     }
-    
+
     pub fn deinit(self: *FilterExpression, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .condition => {},
@@ -302,20 +302,20 @@ pub const FilterExpression = union(enum) {
 pub const FilterBuilder = struct {
     allocator: std.mem.Allocator,
     expression: ?*FilterExpression = null,
-    
+
     pub fn init(allocator: std.mem.Allocator) FilterBuilder {
         return .{
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *FilterBuilder) void {
         if (self.expression) |expr| {
             expr.deinit(self.allocator);
             self.allocator.destroy(expr);
         }
     }
-    
+
     pub fn where(self: *FilterBuilder, field: FilterField, op: FilterOp, value: FilterValue) !*FilterBuilder {
         const expr = try self.allocator.create(FilterExpression);
         expr.* = .{ .condition = FilterCondition{
@@ -323,16 +323,16 @@ pub const FilterBuilder = struct {
             .op = op,
             .value = value,
         } };
-        
+
         if (self.expression) |existing| {
             existing.deinit(self.allocator);
             self.allocator.destroy(existing);
         }
-        
+
         self.expression = expr;
         return self;
     }
-    
+
     pub fn whereField(self: *FilterBuilder, field: FilterField, path: []const u8, op: FilterOp, value: FilterValue) !*FilterBuilder {
         const expr = try self.allocator.create(FilterExpression);
         expr.* = .{ .condition = FilterCondition{
@@ -341,60 +341,60 @@ pub const FilterBuilder = struct {
             .value = value,
             .field_path = path,
         } };
-        
+
         if (self.expression) |existing| {
             existing.deinit(self.allocator);
             self.allocator.destroy(existing);
         }
-        
+
         self.expression = expr;
         return self;
     }
-    
+
     pub fn andWhere(self: *FilterBuilder, field: FilterField, op: FilterOp, value: FilterValue) !*FilterBuilder {
         if (self.expression == null) {
             return self.where(field, op, value);
         }
-        
+
         const right = try self.allocator.create(FilterExpression);
         right.* = .{ .condition = FilterCondition{
             .field = field,
             .op = op,
             .value = value,
         } };
-        
+
         const and_expr = try self.allocator.create(FilterExpression);
         and_expr.* = .{ .and_expr = .{
             .left = self.expression.?,
             .right = right,
         } };
-        
+
         self.expression = and_expr;
         return self;
     }
-    
+
     pub fn orWhere(self: *FilterBuilder, field: FilterField, op: FilterOp, value: FilterValue) !*FilterBuilder {
         if (self.expression == null) {
             return self.where(field, op, value);
         }
-        
+
         const right = try self.allocator.create(FilterExpression);
         right.* = .{ .condition = FilterCondition{
             .field = field,
             .op = op,
             .value = value,
         } };
-        
+
         const or_expr = try self.allocator.create(FilterExpression);
         or_expr.* = .{ .or_expr = .{
             .left = self.expression.?,
             .right = right,
         } };
-        
+
         self.expression = or_expr;
         return self;
     }
-    
+
     pub fn not(self: *FilterBuilder) !*FilterBuilder {
         if (self.expression) |expr| {
             const not_expr = try self.allocator.create(FilterExpression);
@@ -403,7 +403,7 @@ pub const FilterBuilder = struct {
         }
         return self;
     }
-    
+
     pub fn build(self: *FilterBuilder) ?*FilterExpression {
         const expr = self.expression;
         self.expression = null;
@@ -417,21 +417,21 @@ pub const EventFilter = struct {
     expression: ?*FilterExpression = null,
     name: []const u8,
     enabled: bool = true,
-    
+
     pub fn init(allocator: std.mem.Allocator, name: []const u8) EventFilter {
         return .{
             .allocator = allocator,
             .name = name,
         };
     }
-    
+
     pub fn deinit(self: *EventFilter) void {
         if (self.expression) |expr| {
             expr.deinit(self.allocator);
             self.allocator.destroy(expr);
         }
     }
-    
+
     pub fn setExpression(self: *EventFilter, expr: *FilterExpression) void {
         if (self.expression) |old_expr| {
             old_expr.deinit(self.allocator);
@@ -439,7 +439,7 @@ pub const EventFilter = struct {
         }
         self.expression = expr;
     }
-    
+
     pub fn matches(self: *const EventFilter, event: *const Event) bool {
         if (!self.enabled) return false;
         if (self.expression) |expr| {
@@ -447,11 +447,11 @@ pub const EventFilter = struct {
         }
         return true; // No filter means match all
     }
-    
+
     pub fn enable(self: *EventFilter) void {
         self.enabled = true;
     }
-    
+
     pub fn disable(self: *EventFilter) void {
         self.enabled = false;
     }
@@ -470,18 +470,18 @@ fn matchesPattern(text: []const u8, pattern: []const u8) bool {
         } else {
             // prefix*suffix
             const prefix = pattern[0..wildcard_pos];
-            const suffix = pattern[wildcard_pos + 1..];
+            const suffix = pattern[wildcard_pos + 1 ..];
             return std.mem.startsWith(u8, text, prefix) and std.mem.endsWith(u8, text, suffix);
         }
     }
-    
+
     return std.mem.eql(u8, text, pattern);
 }
 
 // Tests
 test "filter condition matching" {
     const allocator = std.testing.allocator;
-    
+
     var event = try types.Event.init(
         allocator,
         "test.event",
@@ -491,7 +491,7 @@ test "filter condition matching" {
         .{ .null = {} },
     );
     defer event.deinit();
-    
+
     // Test name equality
     const name_filter = FilterCondition{
         .field = .name,
@@ -499,7 +499,7 @@ test "filter condition matching" {
         .value = .{ .string = "test.event" },
     };
     try std.testing.expect(name_filter.matches(&event));
-    
+
     // Test severity comparison
     const severity_filter = FilterCondition{
         .field = .severity,
@@ -507,7 +507,7 @@ test "filter condition matching" {
         .value = .{ .severity = .info },
     };
     try std.testing.expect(severity_filter.matches(&event));
-    
+
     // Test category
     const category_filter = FilterCondition{
         .field = .category,
@@ -519,22 +519,22 @@ test "filter condition matching" {
 
 test "filter builder" {
     const allocator = std.testing.allocator;
-    
+
     var builder = FilterBuilder.init(allocator);
     defer builder.deinit();
-    
+
     _ = try builder.where(.severity, .gte, .{ .severity = .warning })
         .andWhere(.category, .eq, .{ .category = .agent });
-    
+
     const expr = builder.build();
     try std.testing.expect(expr != null);
-    
+
     if (expr) |e| {
         defer {
             e.deinit(allocator);
             allocator.destroy(e);
         }
-        
+
         var event = try types.Event.init(
             allocator,
             "test.event",
@@ -544,7 +544,7 @@ test "filter builder" {
             .{ .null = {} },
         );
         defer event.deinit();
-        
+
         try std.testing.expect(e.matches(&event));
     }
 }

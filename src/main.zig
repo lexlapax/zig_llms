@@ -87,11 +87,11 @@ pub const http = struct {
     pub const HttpRequest = @import("http/client.zig").HttpRequest;
     pub const HttpResponse = @import("http/client.zig").HttpResponse;
     pub const HttpMethod = @import("http/client.zig").HttpMethod;
-    
+
     pub const PooledHttpClient = @import("http/pool.zig").PooledHttpClient;
     pub const ConnectionPool = @import("http/pool.zig").ConnectionPool;
     pub const ConnectionPoolConfig = @import("http/pool.zig").ConnectionPoolConfig;
-    
+
     pub const RetryableHttpClient = @import("http/retry.zig").RetryableHttpClient;
     pub const RetryConfig = @import("http/retry.zig").RetryConfig;
     pub const RetryResult = @import("http/retry.zig").RetryResult;
@@ -128,19 +128,19 @@ pub const scripting = struct {
     pub const EngineConfig = @import("scripting/interface.zig").EngineConfig;
     pub const ScriptModule = @import("scripting/interface.zig").ScriptModule;
     pub const ScriptFunction = @import("scripting/interface.zig").ScriptFunction;
-    
+
     pub const ScriptValue = @import("scripting/value_bridge.zig").ScriptValue;
     pub const ScriptError = @import("scripting/error_bridge.zig").ScriptError;
     pub const ScriptContext = @import("scripting/context.zig").ScriptContext;
-    
+
     pub const EngineRegistry = @import("scripting/registry.zig").EngineRegistry;
     pub const EngineInfo = @import("scripting/registry.zig").EngineInfo;
     pub const autoDiscoverEngines = @import("scripting/registry.zig").autoDiscoverEngines;
-    
+
     pub const engines = struct {
         pub const LuaEngine = @import("scripting/engines/lua_engine.zig").LuaEngine;
     };
-    
+
     // API bridges temporarily commented out due to compilation errors
     // These will be fixed in a future task
     // pub const api_bridges = struct {

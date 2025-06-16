@@ -21,38 +21,38 @@ pub const ConditionalExecutionResult = struct {
     execution_time_ms: u64,
     error_message: ?[]const u8 = null,
     allocator: std.mem.Allocator,
-    
+
     pub const Branch = enum {
         none,
         true_branch,
         false_branch,
     };
-    
+
     pub fn deinit(self: *ConditionalExecutionResult) void {
         var iter = self.step_results.iterator();
         while (iter.next()) |entry| {
             _ = entry; // Results managed by context
         }
         self.step_results.deinit();
-        
+
         if (self.error_message) |msg| {
             self.allocator.free(msg);
         }
     }
-    
+
     pub fn toJson(self: *ConditionalExecutionResult) !std.json.Value {
         var obj = std.json.ObjectMap.init(self.allocator);
         errdefer obj.deinit();
-        
+
         try obj.put("success", .{ .bool = self.success });
         try obj.put("condition_result", .{ .bool = self.condition_result });
         try obj.put("executed_branch", .{ .string = @tagName(self.executed_branch) });
         try obj.put("execution_time_ms", .{ .integer = @as(i64, @intCast(self.execution_time_ms)) });
-        
+
         if (self.error_message) |msg| {
             try obj.put("error_message", .{ .string = msg });
         }
-        
+
         // Step results
         var results_obj = std.json.ObjectMap.init(self.allocator);
         var iter = self.step_results.iterator();
@@ -60,7 +60,7 @@ pub const ConditionalExecutionResult = struct {
             try results_obj.put(entry.key_ptr.*, entry.value_ptr.*);
         }
         try obj.put("step_results", .{ .object = results_obj });
-        
+
         return .{ .object = obj };
     }
 };
@@ -69,14 +69,14 @@ pub const ConditionalExecutionResult = struct {
 pub const ConditionalWorkflowExecutor = struct {
     allocator: std.mem.Allocator,
     sequential_executor: SequentialWorkflowExecutor,
-    
+
     pub fn init(allocator: std.mem.Allocator) ConditionalWorkflowExecutor {
         return .{
             .allocator = allocator,
             .sequential_executor = SequentialWorkflowExecutor.init(allocator),
         };
     }
-    
+
     pub fn executeConditionalStep(
         self: *ConditionalWorkflowExecutor,
         config: ConditionStepConfig,
@@ -84,7 +84,7 @@ pub const ConditionalWorkflowExecutor = struct {
         run_context: *RunContext,
     ) !ConditionalExecutionResult {
         const start_time = std.time.milliTimestamp();
-        
+
         var result = ConditionalExecutionResult{
             .success = true,
             .condition_result = false,
@@ -93,21 +93,20 @@ pub const ConditionalWorkflowExecutor = struct {
             .execution_time_ms = 0,
             .allocator = self.allocator,
         };
-        
+
         // Evaluate condition
         const context_data = try self.getContextAsJson(execution_context);
         defer context_data.deinit(self.allocator);
-        
+
         const condition_result = config.condition.evaluate(context_data, self.allocator) catch |err| {
             result.success = false;
-            result.error_message = try std.fmt.allocPrint(self.allocator, 
-                "Condition evaluation failed: {s}", .{@errorName(err)});
+            result.error_message = try std.fmt.allocPrint(self.allocator, "Condition evaluation failed: {s}", .{@errorName(err)});
             result.execution_time_ms = @as(u64, @intCast(std.time.milliTimestamp() - start_time));
             return result;
         };
-        
+
         result.condition_result = condition_result;
-        
+
         // Execute appropriate branch
         const steps_to_execute = if (condition_result) blk: {
             result.executed_branch = .true_branch;
@@ -116,25 +115,24 @@ pub const ConditionalWorkflowExecutor = struct {
             result.executed_branch = .false_branch;
             break :blk config.false_steps;
         };
-        
+
         if (steps_to_execute.len > 0) {
             // Create a temporary workflow for the steps
             var branch_workflow = WorkflowDefinition.init(self.allocator, "conditional_branch", "Conditional Branch");
             defer branch_workflow.deinit();
-            
+
             branch_workflow.steps = steps_to_execute;
-            
+
             // Execute the branch using sequential executor
             const current_input = execution_context.getVariable("input") orelse .{ .null = {} };
             var branch_result = self.sequential_executor.execute(&branch_workflow, current_input, run_context) catch |err| {
                 result.success = false;
-                result.error_message = try std.fmt.allocPrint(self.allocator,
-                    "Branch execution failed: {s}", .{@errorName(err)});
+                result.error_message = try std.fmt.allocPrint(self.allocator, "Branch execution failed: {s}", .{@errorName(err)});
                 result.execution_time_ms = @as(u64, @intCast(std.time.milliTimestamp() - start_time));
                 return result;
             };
             defer branch_result.deinit();
-            
+
             if (!branch_result.success) {
                 result.success = false;
                 result.error_message = if (branch_result.error_message) |msg|
@@ -142,7 +140,7 @@ pub const ConditionalWorkflowExecutor = struct {
                 else
                     try self.allocator.dupe(u8, "Branch execution failed");
             }
-            
+
             // Copy step results
             var iter = branch_result.step_results.iterator();
             while (iter.next()) |entry| {
@@ -150,15 +148,15 @@ pub const ConditionalWorkflowExecutor = struct {
                 try execution_context.setStepResult(entry.key_ptr.*, entry.value_ptr.*);
             }
         }
-        
+
         result.execution_time_ms = @as(u64, @intCast(std.time.milliTimestamp() - start_time));
         return result;
     }
-    
+
     fn getContextAsJson(self: *ConditionalWorkflowExecutor, context: *WorkflowExecutionContext) !std.json.Parsed(std.json.Value) {
         var obj = std.json.ObjectMap.init(self.allocator);
         errdefer obj.deinit();
-        
+
         // Add variables
         var variables_obj = std.json.ObjectMap.init(self.allocator);
         var var_iter = context.variables.iterator();
@@ -166,7 +164,7 @@ pub const ConditionalWorkflowExecutor = struct {
             try variables_obj.put(entry.key_ptr.*, entry.value_ptr.*);
         }
         try obj.put("variables", .{ .object = variables_obj });
-        
+
         // Add step results
         var results_obj = std.json.ObjectMap.init(self.allocator);
         var result_iter = context.step_results.iterator();
@@ -174,20 +172,20 @@ pub const ConditionalWorkflowExecutor = struct {
             try results_obj.put(entry.key_ptr.*, entry.value_ptr.*);
         }
         try obj.put("step_results", .{ .object = results_obj });
-        
+
         // Add execution state
         try obj.put("execution_state", .{ .string = @tagName(context.execution_state) });
-        
+
         if (context.current_step) |step| {
             try obj.put("current_step", .{ .string = step });
         }
-        
+
         const json_value = std.json.Value{ .object = obj };
-        
+
         // Convert to string and parse back to get a Parsed value
         const json_string = try std.json.stringifyAlloc(self.allocator, json_value, .{});
         defer self.allocator.free(json_string);
-        
+
         return std.json.parseFromSlice(std.json.Value, self.allocator, json_string, .{});
     }
 };
@@ -195,41 +193,41 @@ pub const ConditionalWorkflowExecutor = struct {
 // Simple expression evaluator for conditional logic
 pub const SimpleExpressionEvaluator = struct {
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator) SimpleExpressionEvaluator {
         return .{
             .allocator = allocator,
         };
     }
-    
+
     pub fn evaluate(self: *SimpleExpressionEvaluator, expression: []const u8, context: std.json.Value) !bool {
         // Parse simple expressions like:
         // - "variables.count > 5"
         // - "step_results.step1.success == true"
         // - "variables.status == 'ready'"
-        
+
         var tokens = std.mem.tokenize(u8, expression, " ");
-        
+
         const left_path = tokens.next() orelse return error.InvalidExpression;
         const operator = tokens.next() orelse return error.InvalidExpression;
         const right_value = tokens.next() orelse return error.InvalidExpression;
-        
+
         // Extract value from context using path
         const left_value = try self.getValueByPath(context, left_path);
-        
+
         // Parse right value
         const right_parsed = try self.parseValue(right_value);
-        
+
         // Perform comparison
         return self.compareValues(left_value, operator, right_parsed);
     }
-    
+
     fn getValueByPath(self: *SimpleExpressionEvaluator, context: std.json.Value, path: []const u8) !std.json.Value {
         _ = self;
-        
+
         var current = context;
         var path_iter = std.mem.tokenize(u8, path, ".");
-        
+
         while (path_iter.next()) |segment| {
             switch (current) {
                 .object => |obj| {
@@ -238,13 +236,13 @@ pub const SimpleExpressionEvaluator = struct {
                 else => return error.InvalidPath,
             }
         }
-        
+
         return current;
     }
-    
+
     fn parseValue(self: *SimpleExpressionEvaluator, value_str: []const u8) !std.json.Value {
         _ = self;
-        
+
         // Try to parse as different types
         if (std.mem.eql(u8, value_str, "true")) {
             return .{ .bool = true };
@@ -264,9 +262,8 @@ pub const SimpleExpressionEvaluator = struct {
             }
         }
     }
-    
+
     fn compareValues(self: *SimpleExpressionEvaluator, left: std.json.Value, operator: []const u8, right: std.json.Value) !bool {
-        
         if (std.mem.eql(u8, operator, "==")) {
             return self.valuesEqual(left, right);
         } else if (std.mem.eql(u8, operator, "!=")) {
@@ -283,15 +280,15 @@ pub const SimpleExpressionEvaluator = struct {
             return error.UnsupportedOperator;
         }
     }
-    
+
     fn valuesEqual(self: *SimpleExpressionEvaluator, left: std.json.Value, right: std.json.Value) bool {
         _ = self;
-        
+
         const left_tag = std.meta.activeTag(left);
         const right_tag = std.meta.activeTag(right);
-        
+
         if (left_tag != right_tag) return false;
-        
+
         return switch (left) {
             .null => true,
             .bool => |l| l == right.bool,
@@ -301,22 +298,22 @@ pub const SimpleExpressionEvaluator = struct {
             else => false, // Arrays and objects not supported for equality
         };
     }
-    
+
     fn compareNumbers(self: *SimpleExpressionEvaluator, left: std.json.Value, right: std.json.Value, comptime op: enum { greater, less, greater_equal, less_equal }) !bool {
         _ = self;
-        
+
         const left_num = switch (left) {
             .integer => |i| @as(f64, @floatFromInt(i)),
             .float => |f| f,
             else => return error.NotANumber,
         };
-        
+
         const right_num = switch (right) {
             .integer => |i| @as(f64, @floatFromInt(i)),
             .float => |f| f,
             else => return error.NotANumber,
         };
-        
+
         return switch (op) {
             .greater => left_num > right_num,
             .less => left_num < right_num,
@@ -351,24 +348,24 @@ pub fn evaluateJavaScriptExpression(expression: []const u8, context: std.json.Va
 // Tests
 test "simple expression evaluator" {
     const allocator = std.testing.allocator;
-    
+
     var context_obj = std.json.ObjectMap.init(allocator);
     defer context_obj.deinit();
-    
+
     var variables_obj = std.json.ObjectMap.init(allocator);
     try variables_obj.put("count", .{ .integer = 10 });
     try variables_obj.put("status", .{ .string = "ready" });
     try context_obj.put("variables", .{ .object = variables_obj });
-    
+
     const context = std.json.Value{ .object = context_obj };
-    
+
     var evaluator = SimpleExpressionEvaluator.init(allocator);
-    
+
     // Test numeric comparison
     try std.testing.expect(try evaluator.evaluate("variables.count > 5", context));
     try std.testing.expect(!try evaluator.evaluate("variables.count < 5", context));
     try std.testing.expect(try evaluator.evaluate("variables.count == 10", context));
-    
+
     // Test string comparison
     try std.testing.expect(try evaluator.evaluate("variables.status == ready", context));
     try std.testing.expect(!try evaluator.evaluate("variables.status == waiting", context));
@@ -376,18 +373,18 @@ test "simple expression evaluator" {
 
 test "conditional execution" {
     const allocator = std.testing.allocator;
-    
+
     var executor = ConditionalWorkflowExecutor.init(allocator);
-    
+
     // Create test execution context
     var workflow = WorkflowDefinition.init(allocator, "test", "Test");
     defer workflow.deinit();
-    
+
     var context = WorkflowExecutionContext.init(allocator, &workflow);
     defer context.deinit();
-    
+
     try context.setVariable("count", .{ .integer = 15 });
-    
+
     // Create conditional step
     const true_steps = [_]WorkflowStep{
         .{
@@ -397,7 +394,7 @@ test "conditional execution" {
             .config = .{ .delay = .{ .duration_ms = 1 } },
         },
     };
-    
+
     const config = ConditionStepConfig{
         .condition = .{
             .expression_type = .simple,
@@ -406,7 +403,7 @@ test "conditional execution" {
         .true_steps = &true_steps,
         .false_steps = &[_]WorkflowStep{},
     };
-    
+
     var run_context = RunContext{
         .allocator = allocator,
         .config = std.StringHashMap(std.json.Value).init(allocator),
@@ -414,10 +411,10 @@ test "conditional execution" {
         .tracer = null,
     };
     defer run_context.config.deinit();
-    
+
     var result = try executor.executeConditionalStep(config, &context, &run_context);
     defer result.deinit();
-    
+
     try std.testing.expect(result.success);
     try std.testing.expect(result.condition_result);
     try std.testing.expectEqual(ConditionalExecutionResult.Branch.true_branch, result.executed_branch);

@@ -24,21 +24,21 @@ pub const ParallelExecutionResult = struct {
     execution_time_ms: u64,
     max_concurrency_used: u32,
     allocator: std.mem.Allocator,
-    
+
     pub fn deinit(self: *ParallelExecutionResult) void {
         // Clean up failed steps
         for (self.failed_steps) |step| {
             self.allocator.free(step);
         }
         self.allocator.free(self.failed_steps);
-        
+
         // Clean up step results
         var result_iter = self.step_results.iterator();
         while (result_iter.next()) |entry| {
             _ = entry; // Results managed by context
         }
         self.step_results.deinit();
-        
+
         // Clean up errors
         var error_iter = self.errors.iterator();
         while (error_iter.next()) |entry| {
@@ -46,23 +46,23 @@ pub const ParallelExecutionResult = struct {
         }
         self.errors.deinit();
     }
-    
+
     pub fn toJson(self: *ParallelExecutionResult) !std.json.Value {
         var obj = std.json.ObjectMap.init(self.allocator);
         errdefer obj.deinit();
-        
+
         try obj.put("success", .{ .bool = self.success });
         try obj.put("completed_steps", .{ .integer = @as(i64, @intCast(self.completed_steps)) });
         try obj.put("execution_time_ms", .{ .integer = @as(i64, @intCast(self.execution_time_ms)) });
         try obj.put("max_concurrency_used", .{ .integer = @as(i64, @intCast(self.max_concurrency_used)) });
-        
+
         // Failed steps
         var failed_array = std.json.Array.init(self.allocator);
         for (self.failed_steps) |step| {
             try failed_array.append(.{ .string = step });
         }
         try obj.put("failed_steps", .{ .array = failed_array });
-        
+
         // Step results
         var results_obj = std.json.ObjectMap.init(self.allocator);
         var result_iter = self.step_results.iterator();
@@ -70,7 +70,7 @@ pub const ParallelExecutionResult = struct {
             try results_obj.put(entry.key_ptr.*, entry.value_ptr.*);
         }
         try obj.put("step_results", .{ .object = results_obj });
-        
+
         // Errors
         var errors_obj = std.json.ObjectMap.init(self.allocator);
         var error_iter = self.errors.iterator();
@@ -78,7 +78,7 @@ pub const ParallelExecutionResult = struct {
             try errors_obj.put(entry.key_ptr.*, .{ .string = entry.value_ptr.* });
         }
         try obj.put("errors", .{ .object = errors_obj });
-        
+
         return .{ .object = obj };
     }
 };
@@ -89,7 +89,7 @@ pub const WorkflowThreadPool = struct {
     threads: []std.Thread,
     work_queue: WorkQueue,
     shutdown: std.atomic.Value(bool),
-    
+
     const WorkItem = struct {
         step: WorkflowStep,
         context: *WorkflowExecutionContext,
@@ -99,12 +99,12 @@ pub const WorkflowThreadPool = struct {
         completed: *std.atomic.Value(bool),
         executor: *ParallelWorkflowExecutor,
     };
-    
+
     const WorkQueue = struct {
         items: std.ArrayList(WorkItem),
         mutex: std.Thread.Mutex,
         condition: std.Thread.Condition,
-        
+
         pub fn init(allocator: std.mem.Allocator) WorkQueue {
             return .{
                 .items = std.ArrayList(WorkItem).init(allocator),
@@ -112,37 +112,37 @@ pub const WorkflowThreadPool = struct {
                 .condition = .{},
             };
         }
-        
+
         pub fn deinit(self: *WorkQueue) void {
             self.items.deinit();
         }
-        
+
         pub fn push(self: *WorkQueue, item: WorkItem) !void {
             self.mutex.lock();
             defer self.mutex.unlock();
-            
+
             try self.items.append(item);
             self.condition.signal();
         }
-        
+
         pub fn pop(self: *WorkQueue) ?WorkItem {
             self.mutex.lock();
             defer self.mutex.unlock();
-            
+
             while (self.items.items.len == 0) {
                 self.condition.wait(&self.mutex);
             }
-            
+
             return self.items.orderedRemove(0);
         }
-        
+
         pub fn isEmpty(self: *WorkQueue) bool {
             self.mutex.lock();
             defer self.mutex.unlock();
             return self.items.items.len == 0;
         }
     };
-    
+
     pub fn init(allocator: std.mem.Allocator, thread_count: u32) !WorkflowThreadPool {
         var pool = WorkflowThreadPool{
             .allocator = allocator,
@@ -150,45 +150,45 @@ pub const WorkflowThreadPool = struct {
             .work_queue = WorkQueue.init(allocator),
             .shutdown = std.atomic.Value(bool).init(false),
         };
-        
+
         // Start worker threads
         for (pool.threads, 0..) |*thread, i| {
             thread.* = try std.Thread.spawn(.{}, workerThread, .{ &pool, i });
         }
-        
+
         return pool;
     }
-    
+
     pub fn deinit(self: *WorkflowThreadPool) void {
         // Signal shutdown
         self.shutdown.store(true, .Release);
-        
+
         // Wake up all threads
         for (0..self.threads.len) |_| {
             self.work_queue.condition.signal();
         }
-        
+
         // Wait for threads to finish
         for (self.threads) |thread| {
             thread.join();
         }
-        
+
         self.allocator.free(self.threads);
         self.work_queue.deinit();
     }
-    
+
     pub fn submitWork(self: *WorkflowThreadPool, work: WorkItem) !void {
         try self.work_queue.push(work);
     }
-    
+
     fn workerThread(pool: *WorkflowThreadPool, thread_id: usize) void {
         _ = thread_id;
-        
+
         while (!pool.shutdown.load(.Acquire)) {
             const work_item = pool.work_queue.pop() orelse continue;
-            
+
             if (pool.shutdown.load(.Acquire)) break;
-            
+
             // Execute the work item
             const result = work_item.executor.executeStep(
                 work_item.step,
@@ -199,7 +199,7 @@ pub const WorkflowThreadPool = struct {
                 work_item.completed.store(true, .Release);
                 continue;
             };
-            
+
             work_item.result.* = result;
             work_item.completed.store(true, .Release);
         }
@@ -211,7 +211,7 @@ pub const ParallelWorkflowExecutor = struct {
     allocator: std.mem.Allocator,
     config: ExecutorConfig = .{},
     thread_pool: ?WorkflowThreadPool = null,
-    
+
     pub const ExecutorConfig = struct {
         max_concurrency: ?u32 = null,
         fail_fast: bool = true,
@@ -221,19 +221,19 @@ pub const ParallelWorkflowExecutor = struct {
         use_thread_pool: bool = true,
         wait_for_all: bool = true,
     };
-    
+
     pub fn init(allocator: std.mem.Allocator) ParallelWorkflowExecutor {
         return .{
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *ParallelWorkflowExecutor) void {
         if (self.thread_pool) |*pool| {
             pool.deinit();
         }
     }
-    
+
     pub fn execute(
         self: *ParallelWorkflowExecutor,
         workflow: *const WorkflowDefinition,
@@ -241,15 +241,15 @@ pub const ParallelWorkflowExecutor = struct {
         context: *RunContext,
     ) !ParallelExecutionResult {
         const start_time = std.time.milliTimestamp();
-        
+
         // Initialize thread pool if configured
         if (self.config.use_thread_pool and self.thread_pool == null) {
             self.thread_pool = try WorkflowThreadPool.init(self.allocator, self.config.thread_pool_size);
         }
-        
+
         var execution_context = WorkflowExecutionContext.init(self.allocator, workflow);
         defer execution_context.deinit();
-        
+
         var result = ParallelExecutionResult{
             .success = true,
             .completed_steps = 0,
@@ -260,28 +260,28 @@ pub const ParallelWorkflowExecutor = struct {
             .max_concurrency_used = 0,
             .allocator = self.allocator,
         };
-        
+
         // Initialize execution context
         try execution_context.setVariable("input", input);
         execution_context.execution_state = .running;
-        
+
         // Determine actual concurrency
         const max_concurrency = self.config.max_concurrency orelse @as(u32, @intCast(workflow.steps.len));
         const actual_concurrency = @min(max_concurrency, @as(u32, @intCast(workflow.steps.len)));
         result.max_concurrency_used = actual_concurrency;
-        
+
         if (self.config.use_thread_pool and self.thread_pool != null) {
             try self.executeWithThreadPool(workflow, &execution_context, context, &result);
         } else {
             try self.executeWithoutThreadPool(workflow, &execution_context, context, &result, actual_concurrency);
         }
-        
+
         execution_context.execution_state = if (result.success) .completed else .failed;
         result.execution_time_ms = @as(u64, @intCast(std.time.milliTimestamp() - start_time));
-        
+
         return result;
     }
-    
+
     fn executeWithThreadPool(
         self: *ParallelWorkflowExecutor,
         workflow: *const WorkflowDefinition,
@@ -290,24 +290,24 @@ pub const ParallelWorkflowExecutor = struct {
         result: *ParallelExecutionResult,
     ) !void {
         var pool = &self.thread_pool.?;
-        
+
         // Prepare work items
         var step_results = try self.allocator.alloc(?std.json.Value, workflow.steps.len);
         defer self.allocator.free(step_results);
-        
+
         var step_errors = try self.allocator.alloc(?[]const u8, workflow.steps.len);
         defer self.allocator.free(step_errors);
-        
+
         var completed_flags = try self.allocator.alloc(std.atomic.Value(bool), workflow.steps.len);
         defer self.allocator.free(completed_flags);
-        
+
         // Initialize arrays
         for (0..workflow.steps.len) |i| {
             step_results[i] = null;
             step_errors[i] = null;
             completed_flags[i] = std.atomic.Value(bool).init(false);
         }
-        
+
         // Submit all work items
         for (workflow.steps, 0..) |step, i| {
             const work_item = WorkflowThreadPool.WorkItem{
@@ -319,19 +319,19 @@ pub const ParallelWorkflowExecutor = struct {
                 .completed = &completed_flags[i],
                 .executor = self,
             };
-            
+
             try pool.submitWork(work_item);
         }
-        
+
         // Wait for completion or timeout
         const timeout_ms = self.config.timeout_ms orelse std.math.maxInt(u32);
         const start_wait = std.time.milliTimestamp();
-        
+
         while (true) {
             // Check if all completed
             var all_completed = true;
             var completed_count: usize = 0;
-            
+
             for (completed_flags) |*flag| {
                 if (flag.load(.Acquire)) {
                     completed_count += 1;
@@ -339,16 +339,16 @@ pub const ParallelWorkflowExecutor = struct {
                     all_completed = false;
                 }
             }
-            
+
             result.completed_steps = completed_count;
-            
+
             // Check for fail-fast condition
             if (self.config.fail_fast) {
                 for (step_errors, 0..) |error_msg, i| {
                     if (error_msg != null) {
                         result.success = false;
                         try result.errors.put(workflow.steps[i].id, error_msg.?);
-                        
+
                         var failed_list = std.ArrayList([]const u8).init(self.allocator);
                         try failed_list.append(try self.allocator.dupe(u8, workflow.steps[i].id));
                         result.failed_steps = try failed_list.toOwnedSlice();
@@ -356,25 +356,25 @@ pub const ParallelWorkflowExecutor = struct {
                     }
                 }
             }
-            
+
             if (all_completed or (!self.config.wait_for_all and completed_count > 0)) {
                 break;
             }
-            
+
             // Check timeout
             const elapsed = @as(u32, @intCast(std.time.milliTimestamp() - start_wait));
             if (elapsed > timeout_ms) {
                 result.success = false;
                 return;
             }
-            
+
             std.time.sleep(1 * std.time.ns_per_ms); // Wait 1ms
         }
-        
+
         // Collect results and errors
         var failed_list = std.ArrayList([]const u8).init(self.allocator);
         defer failed_list.deinit();
-        
+
         for (workflow.steps, 0..) |step, i| {
             if (step_results[i]) |step_result| {
                 try execution_context.setStepResult(step.id, step_result);
@@ -382,17 +382,17 @@ pub const ParallelWorkflowExecutor = struct {
                     try result.step_results.put(step.id, step_result);
                 }
             }
-            
+
             if (step_errors[i]) |error_msg| {
                 result.success = false;
                 try result.errors.put(step.id, error_msg);
                 try failed_list.append(try self.allocator.dupe(u8, step.id));
             }
         }
-        
+
         result.failed_steps = try failed_list.toOwnedSlice();
     }
-    
+
     fn executeWithoutThreadPool(
         self: *ParallelWorkflowExecutor,
         workflow: *const WorkflowDefinition,
@@ -403,45 +403,45 @@ pub const ParallelWorkflowExecutor = struct {
     ) !void {
         // Simple parallel execution without thread pool
         // This is a simplified version that executes in batches
-        
+
         var step_index: usize = 0;
         var failed_list = std.ArrayList([]const u8).init(self.allocator);
         defer failed_list.deinit();
-        
+
         while (step_index < workflow.steps.len) {
             const batch_end = @min(step_index + concurrency, workflow.steps.len);
-            
+
             // Execute batch
             for (step_index..batch_end) |i| {
                 const step = workflow.steps[i];
-                
+
                 const step_result = self.executeStep(step, execution_context, run_context) catch |err| {
                     result.success = false;
                     const error_msg = try self.allocator.dupe(u8, @errorName(err));
                     try result.errors.put(step.id, error_msg);
                     try failed_list.append(try self.allocator.dupe(u8, step.id));
-                    
+
                     if (self.config.fail_fast) {
                         result.failed_steps = try failed_list.toOwnedSlice();
                         return;
                     }
                     continue;
                 };
-                
+
                 try execution_context.setStepResult(step.id, step_result);
                 if (self.config.collect_results) {
                     try result.step_results.put(step.id, step_result);
                 }
-                
+
                 result.completed_steps += 1;
             }
-            
+
             step_index = batch_end;
         }
-        
+
         result.failed_steps = try failed_list.toOwnedSlice();
     }
-    
+
     pub fn executeStep(
         self: *ParallelWorkflowExecutor,
         step: WorkflowStep,
@@ -457,7 +457,7 @@ pub const ParallelWorkflowExecutor = struct {
             else => error.StepTypeNotSupported,
         };
     }
-    
+
     fn executeAgentStep(
         self: *ParallelWorkflowExecutor,
         config: definition.AgentStepConfig,
@@ -470,7 +470,7 @@ pub const ParallelWorkflowExecutor = struct {
         _ = run_context;
         return error.NotImplemented;
     }
-    
+
     fn executeToolStep(
         self: *ParallelWorkflowExecutor,
         config: definition.ToolStepConfig,
@@ -483,7 +483,7 @@ pub const ParallelWorkflowExecutor = struct {
         _ = run_context;
         return error.NotImplemented;
     }
-    
+
     fn executeParallelStep(
         self: *ParallelWorkflowExecutor,
         config: ParallelStepConfig,
@@ -493,39 +493,39 @@ pub const ParallelWorkflowExecutor = struct {
         // Create a sub-workflow for the parallel steps
         var sub_workflow = WorkflowDefinition.init(self.allocator, "parallel_sub", "Parallel Substeps");
         defer sub_workflow.deinit();
-        
+
         sub_workflow.steps = config.steps;
-        
+
         // Create a sub-executor
         var sub_executor = ParallelWorkflowExecutor.init(self.allocator);
         defer sub_executor.deinit();
-        
+
         sub_executor.config.max_concurrency = config.max_concurrency;
         sub_executor.config.fail_fast = config.fail_fast;
         sub_executor.config.collect_results = config.collect_results;
         sub_executor.config.use_thread_pool = false; // Avoid nested thread pools
-        
+
         // Execute sub-workflow
         const current_input = execution_context.getVariable("input") orelse .{ .null = {} };
         var sub_result = try sub_executor.execute(&sub_workflow, current_input, run_context);
         defer sub_result.deinit();
-        
+
         if (!sub_result.success) {
             return error.SubWorkflowFailed;
         }
-        
+
         return try sub_result.toJson();
     }
-    
+
     fn executeDelayStep(
         self: *ParallelWorkflowExecutor,
         config: definition.DelayStepConfig,
         execution_context: *WorkflowExecutionContext,
     ) !std.json.Value {
         _ = execution_context;
-        
+
         var delay_ms = config.duration_ms;
-        
+
         // Add jitter if specified
         if (config.jitter_percent > 0.0) {
             var rng = std.Random.DefaultPrng.init(@as(u64, @intCast(std.time.milliTimestamp())));
@@ -533,16 +533,16 @@ pub const ParallelWorkflowExecutor = struct {
             const jitter_ms = @as(u32, @intFromFloat(rng.random().float(f32) * jitter));
             delay_ms += jitter_ms;
         }
-        
+
         std.time.sleep(delay_ms * std.time.ns_per_ms);
-        
+
         var result = std.json.ObjectMap.init(self.allocator);
         try result.put("delayed_ms", .{ .integer = @as(i64, @intCast(delay_ms)) });
         try result.put("step_type", .{ .string = "delay" });
-        
+
         return .{ .object = result };
     }
-    
+
     fn executeTransformStep(
         self: *ParallelWorkflowExecutor,
         config: definition.TransformStepConfig,
@@ -558,11 +558,11 @@ pub const ParallelWorkflowExecutor = struct {
 // Tests
 test "parallel executor with delay steps" {
     const allocator = std.testing.allocator;
-    
+
     // Create a workflow with multiple delay steps
     var workflow = WorkflowDefinition.init(allocator, "parallel_test", "Parallel Test");
     defer workflow.deinit();
-    
+
     const steps = [_]WorkflowStep{
         .{
             .id = "step1",
@@ -583,14 +583,14 @@ test "parallel executor with delay steps" {
             .config = .{ .delay = .{ .duration_ms = 5 } },
         },
     };
-    
+
     workflow.steps = &steps;
-    
+
     var executor = ParallelWorkflowExecutor.init(allocator);
     defer executor.deinit();
-    
+
     executor.config.use_thread_pool = false; // Use simple parallel execution for test
-    
+
     var run_context = RunContext{
         .allocator = allocator,
         .config = std.StringHashMap(std.json.Value).init(allocator),
@@ -598,16 +598,16 @@ test "parallel executor with delay steps" {
         .tracer = null,
     };
     defer run_context.config.deinit();
-    
+
     const start_time = std.time.milliTimestamp();
     var result = try executor.execute(&workflow, .{ .null = {} }, &run_context);
     defer result.deinit();
     const elapsed = std.time.milliTimestamp() - start_time;
-    
+
     try std.testing.expect(result.success);
     try std.testing.expectEqual(@as(usize, 3), result.completed_steps);
     try std.testing.expectEqual(@as(u32, 3), result.max_concurrency_used);
-    
+
     // Should complete faster than sequential execution (which would take 30ms)
     try std.testing.expect(elapsed < 25); // Should complete in ~15ms (longest step)
 }

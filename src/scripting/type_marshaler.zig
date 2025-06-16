@@ -49,7 +49,7 @@ const TestScenario = struct {
     name: []const u8,
     fixtures: std.json.Value,
     tests: []const TestCase,
-    
+
     const TestCase = struct {
         name: []const u8,
         input: std.json.Value,
@@ -59,7 +59,6 @@ const TestScenario = struct {
 
 /// Type marshaler for complex zig_llms structures
 pub const TypeMarshaler = struct {
-    
     /// Marshal AgentConfig from ScriptValue
     pub fn marshalAgentConfig(value: ScriptValue, allocator: std.mem.Allocator) !AgentConfig {
         switch (value) {
@@ -69,45 +68,45 @@ pub const TypeMarshaler = struct {
                     .provider = "",
                     .model = "",
                 };
-                
+
                 // Required fields
                 if (obj.get("name")) |name| {
                     config.name = try name.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("provider")) |provider| {
                     config.provider = try provider.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("model")) |model| {
                     config.model = try model.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 // Optional fields
                 if (obj.get("temperature")) |temp| {
                     config.temperature = try temp.toZig(f32, allocator);
                 }
-                
+
                 if (obj.get("max_tokens")) |tokens| {
                     config.max_tokens = try tokens.toZig(u32, allocator);
                 }
-                
+
                 if (obj.get("tools")) |tools| {
                     config.tools = try marshalStringArray(tools, allocator);
                 }
-                
+
                 return config;
             },
             else => return error.TypeMismatch,
         }
     }
-    
+
     /// Marshal ToolDefinition from ScriptValue
     pub fn marshalToolDefinition(value: ScriptValue, allocator: std.mem.Allocator) !ToolDefinition {
         switch (value) {
@@ -116,31 +115,31 @@ pub const TypeMarshaler = struct {
                     .name = "",
                     .description = "",
                 };
-                
+
                 if (obj.get("name")) |name| {
                     def.name = try name.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("description")) |desc| {
                     def.description = try desc.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("schema")) |schema| {
                     def.schema = try marshalJsonValue(schema, allocator);
                 }
-                
+
                 // Note: Function callbacks require special handling per engine
-                
+
                 return def;
             },
             else => return error.TypeMismatch,
         }
     }
-    
+
     /// Marshal WorkflowStep from ScriptValue
     pub fn marshalWorkflowStep(value: ScriptValue, allocator: std.mem.Allocator) !WorkflowStep {
         switch (value) {
@@ -151,47 +150,47 @@ pub const TypeMarshaler = struct {
                     .action = "",
                     .params = std.json.Value.null,
                 };
-                
+
                 if (obj.get("name")) |name| {
                     step.name = try name.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("agent")) |agent| {
                     step.agent = try agent.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("action")) |action| {
                     step.action = try action.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("params")) |params| {
                     step.params = try marshalJsonValue(params, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("depends_on")) |deps| {
                     step.depends_on = try marshalStringArray(deps, allocator);
                 }
-                
+
                 return step;
             },
             else => return error.TypeMismatch,
         }
     }
-    
+
     /// Unmarshal response to ScriptValue
     pub fn unmarshalResponse(response: anytype, allocator: std.mem.Allocator) !ScriptValue {
         const T = @TypeOf(response);
         return ScriptValue.fromZig(T, response, allocator);
     }
-    
+
     /// Marshal array of strings
     fn marshalStringArray(value: ScriptValue, allocator: std.mem.Allocator) ![]const []const u8 {
         switch (value) {
@@ -205,7 +204,7 @@ pub const TypeMarshaler = struct {
             else => return error.TypeMismatch,
         }
     }
-    
+
     /// Convert ScriptValue to JSON value
     pub fn marshalJsonValue(value: ScriptValue, allocator: std.mem.Allocator) !std.json.Value {
         return switch (value) {
@@ -235,7 +234,7 @@ pub const TypeMarshaler = struct {
             .userdata => return error.CannotMarshalUserdata,
         };
     }
-    
+
     /// Convert JSON value to ScriptValue
     pub fn unmarshalJsonValue(json: std.json.Value, allocator: std.mem.Allocator) !ScriptValue {
         return switch (json) {
@@ -266,7 +265,7 @@ pub const TypeMarshaler = struct {
             },
         };
     }
-    
+
     /// Marshal provider configuration
     pub fn marshalProviderConfig(value: ScriptValue, allocator: std.mem.Allocator) !ProviderConfig {
         switch (value) {
@@ -275,41 +274,41 @@ pub const TypeMarshaler = struct {
                     .name = "",
                     .type = "",
                 };
-                
+
                 if (obj.get("name")) |name| {
                     config.name = try name.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("type")) |provider_type| {
                     config.type = try provider_type.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("base_url")) |url| {
                     config.base_url = try url.toZig([]const u8, allocator);
                 }
-                
+
                 if (obj.get("api_key")) |key| {
                     config.api_key = try key.toZig([]const u8, allocator);
                 }
-                
+
                 if (obj.get("models")) |models| {
                     config.models = try marshalStringArray(models, allocator);
                 }
-                
+
                 if (obj.get("timeout")) |timeout| {
                     config.timeout = try timeout.toZig(u32, allocator);
                 }
-                
+
                 return config;
             },
             else => return error.TypeMismatch,
         }
     }
-    
+
     /// Marshal event data
     pub fn marshalEventData(value: ScriptValue, allocator: std.mem.Allocator) !EventData {
         switch (value) {
@@ -319,21 +318,21 @@ pub const TypeMarshaler = struct {
                     .timestamp = std.time.milliTimestamp(),
                     .data = std.json.Value.null,
                 };
-                
+
                 if (obj.get("event_type")) |event_type| {
                     event.event_type = try event_type.toZig([]const u8, allocator);
                 } else {
                     return error.MissingField;
                 }
-                
+
                 if (obj.get("timestamp")) |ts| {
                     event.timestamp = try ts.toZig(i64, allocator);
                 }
-                
+
                 if (obj.get("data")) |data| {
                     event.data = try marshalJsonValue(data, allocator);
                 }
-                
+
                 return event;
             },
             else => return error.TypeMismatch,
@@ -345,19 +344,19 @@ pub const TypeMarshaler = struct {
 test "TypeMarshaler AgentConfig" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var obj = ScriptValue.Object.init(allocator);
     defer obj.deinit();
-    
+
     try obj.put("name", ScriptValue{ .string = try allocator.dupe(u8, "test_agent") });
     try obj.put("provider", ScriptValue{ .string = try allocator.dupe(u8, "openai") });
     try obj.put("model", ScriptValue{ .string = try allocator.dupe(u8, "gpt-4") });
     try obj.put("temperature", ScriptValue{ .number = 0.5 });
     try obj.put("max_tokens", ScriptValue{ .integer = 2000 });
-    
+
     const value = ScriptValue{ .object = obj };
     const config = try TypeMarshaler.marshalAgentConfig(value, allocator);
-    
+
     try testing.expectEqualStrings("test_agent", config.name);
     try testing.expectEqualStrings("openai", config.provider);
     try testing.expectEqualStrings("gpt-4", config.model);
@@ -368,29 +367,29 @@ test "TypeMarshaler AgentConfig" {
 test "TypeMarshaler JSON conversion" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     // Create a ScriptValue object
     var obj = ScriptValue.Object.init(allocator);
     defer obj.deinit();
-    
+
     try obj.put("string", ScriptValue{ .string = try allocator.dupe(u8, "hello") });
     try obj.put("number", ScriptValue{ .integer = 42 });
     try obj.put("bool", ScriptValue{ .boolean = true });
-    
+
     const script_val = ScriptValue{ .object = obj };
-    
+
     // Convert to JSON
     const json_val = try TypeMarshaler.marshalJsonValue(script_val, allocator);
     defer json_val.object.deinit();
-    
+
     try testing.expect(json_val == .object);
     try testing.expectEqualStrings("hello", json_val.object.get("string").?.string);
     try testing.expectEqual(@as(i64, 42), json_val.object.get("number").?.integer);
     try testing.expectEqual(true, json_val.object.get("bool").?.bool);
-    
+
     // Convert back to ScriptValue
     const back = try TypeMarshaler.unmarshalJsonValue(json_val, allocator);
     defer back.deinit(allocator);
-    
+
     try testing.expect(back == .object);
 }

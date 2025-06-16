@@ -47,26 +47,26 @@ pub const EventSystem = struct {
     emitter_instance: *EventEmitter,
     recorder_instance: ?*EventRecorder = null,
     initialized: bool = false,
-    
+
     var global_system: ?*EventSystem = null;
     var global_mutex = std.Thread.Mutex{};
-    
+
     pub fn init(allocator: std.mem.Allocator, config: SystemConfig) !*EventSystem {
         global_mutex.lock();
         defer global_mutex.unlock();
-        
+
         if (global_system != null) {
             return error.EventSystemAlreadyInitialized;
         }
-        
+
         const system = try allocator.create(EventSystem);
         errdefer allocator.destroy(system);
-        
+
         // Create emitter
         const emitter_instance = try allocator.create(EventEmitter);
         emitter_instance.* = EventEmitter.init(allocator, config.emitter_config);
         try emitter_instance.start();
-        
+
         // Create recorder if configured
         var recorder_instance: ?*EventRecorder = null;
         if (config.enable_recording) {
@@ -82,10 +82,10 @@ pub const EventSystem = struct {
                     break :blk &file_backend.backend;
                 },
             };
-            
+
             recorder_instance = try allocator.create(EventRecorder);
             recorder_instance.?.* = EventRecorder.init(allocator, backend, config.recorder_config);
-            
+
             // Auto-subscribe recorder to emitter
             const record_handler = struct {
                 fn handle(event: *const Event, context: ?*anyopaque) void {
@@ -95,66 +95,66 @@ pub const EventSystem = struct {
                     }
                 }
             }.handle;
-            
+
             _ = try emitter_instance.subscribe("*", record_handler, .{});
-            
+
             // Update subscription to include recorder as context
             var iter = emitter_instance.subscriptions.iterator();
             if (iter.next()) |entry| {
                 entry.value_ptr.context = recorder_instance.?;
             }
         }
-        
+
         system.* = EventSystem{
             .allocator = allocator,
             .emitter_instance = emitter_instance,
             .recorder_instance = recorder_instance,
             .initialized = true,
         };
-        
+
         global_system = system;
         return system;
     }
-    
+
     pub fn deinit(self: *EventSystem) void {
         global_mutex.lock();
         defer global_mutex.unlock();
-        
+
         if (self.recorder_instance) |rec| {
             rec.deinit();
-            
+
             // Clean up backend
             rec.backend.close();
-            
+
             self.allocator.destroy(rec);
         }
-        
+
         self.emitter_instance.stop();
         self.emitter_instance.deinit();
         self.allocator.destroy(self.emitter_instance);
-        
+
         self.allocator.destroy(self);
-        
+
         if (global_system == self) {
             global_system = null;
         }
     }
-    
+
     pub fn getGlobal() !*EventSystem {
         global_mutex.lock();
         defer global_mutex.unlock();
-        
+
         if (global_system) |system| {
             return system;
         }
-        
+
         return error.EventSystemNotInitialized;
     }
-    
+
     pub fn emit(self: *EventSystem, event: Event) !void {
         return self.emitter_instance.emit(event);
     }
-    
+
     pub fn subscribe(
         self: *EventSystem,
         pattern: []const u8,
@@ -163,48 +163,48 @@ pub const EventSystem = struct {
     ) ![]const u8 {
         return self.emitter_instance.subscribe(pattern, handler, options);
     }
-    
+
     pub fn unsubscribe(self: *EventSystem, subscription_id: []const u8) bool {
         return self.emitter_instance.unsubscribe(subscription_id);
     }
-    
+
     pub fn query(self: *EventSystem, filter_expr: ?*const FilterExpression, limit: ?usize) ![]Event {
         if (self.recorder_instance) |rec| {
             return rec.query(filter_expr, limit);
         }
         return error.RecordingNotEnabled;
     }
-    
+
     pub fn replay(self: *EventSystem, config: recorder.EventReplayer.ReplayConfig) !void {
         if (self.recorder_instance) |rec| {
             const events = try rec.query(config.filter_expr, null);
             var replayer = recorder.EventReplayer.init(self.allocator, events, config);
             defer replayer.deinit();
-            
+
             try replayer.replay();
         } else {
             return error.RecordingNotEnabled;
         }
     }
-    
+
     pub fn replayFromFile(self: *EventSystem, file_path: []const u8, config: recorder.EventReplayer.ReplayConfig) !void {
         var file_backend = FileBackend.init(self.allocator, file_path);
         defer file_backend.backend.close();
-        
+
         const events = try file_backend.backend.retrieve(config.filter_expr, null, self.allocator);
         var replayer = recorder.EventReplayer.init(self.allocator, events, config);
         defer replayer.deinit();
-        
+
         try replayer.replay();
     }
-    
+
     pub const SystemConfig = struct {
         emitter_config: EventEmitter.EmitterConfig = .{},
         recorder_config: EventRecorder.RecorderConfig = .{},
         enable_recording: bool = true,
         storage_backend: StorageBackendType = .memory,
     };
-    
+
     pub const StorageBackendType = union(enum) {
         memory,
         file: []const u8,
@@ -277,27 +277,27 @@ pub fn toolFailed(allocator: std.mem.Allocator, tool_name: []const u8, error_mes
 // Tests
 test "event system initialization" {
     const allocator = std.testing.allocator;
-    
+
     const system = try EventSystem.init(allocator, .{
         .enable_recording = true,
         .storage_backend = .memory,
     });
     defer system.deinit();
-    
+
     try std.testing.expect(system.initialized);
     try std.testing.expect(system.recorder_instance != null);
 }
 
 test "event system emit and query" {
     const allocator = std.testing.allocator;
-    
+
     const system = try EventSystem.init(allocator, .{
         .enable_recording = true,
         .storage_backend = .memory,
         .emitter_config = .{ .async_processing = false },
     });
     defer system.deinit();
-    
+
     // Emit some events
     var event1 = try Event.init(
         allocator,
@@ -309,7 +309,7 @@ test "event system emit and query" {
     );
     defer event1.deinit();
     try system.emit(event1);
-    
+
     var event2 = try Event.init(
         allocator,
         "test.event2",
@@ -320,7 +320,7 @@ test "event system emit and query" {
     );
     defer event2.deinit();
     try system.emit(event2);
-    
+
     // Query all events
     const all_events = try system.query(null, null);
     defer {
@@ -330,21 +330,21 @@ test "event system emit and query" {
         }
         allocator.free(all_events);
     }
-    
+
     try std.testing.expectEqual(@as(usize, 2), all_events.len);
-    
+
     // Query with filter
     var builder = FilterBuilder.init(allocator);
     defer builder.deinit();
-    
+
     _ = try builder.where(.severity, .gte, .{ .severity = .warning });
-    
+
     if (builder.build()) |filter_expr| {
         defer {
             filter_expr.deinit(allocator);
             allocator.destroy(filter_expr);
         }
-        
+
         const filtered_events = try system.query(filter_expr, null);
         defer {
             for (filtered_events) |*e| {
@@ -353,7 +353,7 @@ test "event system emit and query" {
             }
             allocator.free(filtered_events);
         }
-        
+
         try std.testing.expectEqual(@as(usize, 1), filtered_events.len);
         try std.testing.expectEqualStrings("test.event2", filtered_events[0].name);
     }
@@ -361,14 +361,14 @@ test "event system emit and query" {
 
 test "event replay" {
     const allocator = std.testing.allocator;
-    
+
     const system = try EventSystem.init(allocator, .{
         .enable_recording = true,
         .storage_backend = .memory,
         .emitter_config = .{ .async_processing = false },
     });
     defer system.deinit();
-    
+
     // Emit some events
     for (0..3) |i| {
         var event = try Event.init(
@@ -383,14 +383,14 @@ test "event replay" {
         defer event.deinit();
         try system.emit(event);
     }
-    
+
     // Test context for replay callback
     const TestContext = struct {
         count: usize = 0,
     };
-    
+
     var context = TestContext{};
-    
+
     const replay_handler = struct {
         fn handle(event: *const Event, ctx: ?*anyopaque) void {
             _ = event;
@@ -400,13 +400,13 @@ test "event replay" {
             }
         }
     }.handle;
-    
+
     // Replay events
     try system.replay(.{
         .respect_timestamps = false,
         .callback = replay_handler,
         .context = &context,
     });
-    
+
     try std.testing.expectEqual(@as(usize, 3), context.count);
 }

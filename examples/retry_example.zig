@@ -12,14 +12,14 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    
+
     // Create base HTTP client
     const client_config = HttpClientConfig{
         .timeout_ms = 5000,
         .user_agent = "retry-example/1.0.0",
     };
     const http_client = HttpClient.init(allocator, client_config);
-    
+
     // Configure retry behavior
     const retry_config = RetryConfig{
         .max_attempts = 5,
@@ -29,11 +29,11 @@ pub fn main() !void {
         .jitter = true,
         .retry_on_status_codes = &[_]u16{ 429, 500, 502, 503, 504 },
     };
-    
+
     // Create retryable client
     var retry_client = RetryableHttpClient.init(allocator, http_client, retry_config);
     defer retry_client.deinit();
-    
+
     // Example 1: Simple GET request with retry
     std.debug.print("Example 1: GET request with retry\n", .{});
     var get_result = try retry_client.get("https://httpbin.org/status/503");
@@ -50,14 +50,14 @@ pub fn main() !void {
         }
     }
     std.debug.print("Total retry delay: {d}ms\n\n", .{get_result.total_delay_ms});
-    
+
     // Example 2: POST request with JSON data
     std.debug.print("Example 2: POST request with retry\n", .{});
     const post_data = .{
         .message = "Hello, retry!",
         .attempt = 1,
     };
-    
+
     var post_result = try retry_client.postJson("https://httpbin.org/status/429", post_data);
     if (post_result.succeeded) {
         std.debug.print("Request succeeded after {d} attempts\n", .{post_result.attempts});
@@ -69,26 +69,26 @@ pub fn main() !void {
         std.debug.print("Request failed after {d} attempts\n", .{post_result.attempts});
         std.debug.print("Total retry delay: {d}ms\n", .{post_result.total_delay_ms});
     }
-    
+
     // Example 3: Custom retry configuration
     std.debug.print("\nExample 3: Conservative retry strategy\n", .{});
     const conservative_config = zig_llms.http.retry.conservativeRetryConfig();
     var conservative_client = RetryableHttpClient.init(allocator, http_client, conservative_config);
     defer conservative_client.deinit();
-    
+
     const conservative_result = try conservative_client.get("https://httpbin.org/delay/10");
     std.debug.print("Attempts: {d}, Success: {}\n", .{ conservative_result.attempts, conservative_result.succeeded });
 }
 
 test "retry integration with real HTTP client" {
     const allocator = std.testing.allocator;
-    
+
     // Create HTTP client
     const client_config = HttpClientConfig{
         .timeout_ms = 1000,
     };
     const http_client = HttpClient.init(allocator, client_config);
-    
+
     // Create retry client with fast retry for testing
     const retry_config = RetryConfig{
         .max_attempts = 3,
@@ -96,10 +96,10 @@ test "retry integration with real HTTP client" {
         .max_delay_ms = 500,
         .jitter = false,
     };
-    
+
     var retry_client = RetryableHttpClient.init(allocator, http_client, retry_config);
     defer retry_client.deinit();
-    
+
     // This test would require network access, so we'll skip the actual request
     // In a real test, you'd use a mock server or test endpoint
 }

@@ -7,7 +7,7 @@ const parser = @import("parser.zig");
 pub const YamlParser = struct {
     base: parser.Parser,
     allocator: std.mem.Allocator,
-    
+
     const vtable = parser.Parser.VTable{
         .parse = yamlParse,
         .canParse = yamlCanParse,
@@ -15,14 +15,14 @@ pub const YamlParser = struct {
         .getName = yamlGetName,
         .deinit = yamlDeinit,
     };
-    
+
     pub fn init(allocator: std.mem.Allocator) YamlParser {
         return .{
             .base = parser.Parser{ .vtable = &vtable },
             .allocator = allocator,
         };
     }
-    
+
     fn yamlParse(
         base: *parser.Parser,
         input: []const u8,
@@ -31,10 +31,10 @@ pub const YamlParser = struct {
     ) parser.ParseError!parser.ParseResult {
         const self: *YamlParser = @fieldParentPtr("base", base);
         _ = self;
-        
+
         var warnings = std.ArrayList([]const u8).init(allocator);
         defer warnings.deinit();
-        
+
         // Clean the input
         const cleaned = parser.utils.cleanLlmResponse(allocator, input) catch {
             return parser.ParseResult{
@@ -46,7 +46,7 @@ pub const YamlParser = struct {
             };
         };
         defer allocator.free(cleaned);
-        
+
         // Extract YAML from code block if present
         const yaml_content = if (parser.utils.extractCodeBlock(cleaned, "yaml")) |content|
             content
@@ -54,10 +54,10 @@ pub const YamlParser = struct {
             content
         else
             cleaned;
-        
+
         // Parse YAML into JSON
         const json_value = try parseYamlToJson(allocator, yaml_content);
-        
+
         // Validate against schema if provided
         if (options.validation_schema) |schema| {
             const validation_result = schema.validate(json_value) catch {
@@ -69,7 +69,7 @@ pub const YamlParser = struct {
                     .allocator = allocator,
                 };
             };
-            
+
             if (!validation_result.valid and options.strict) {
                 return parser.ParseResult{
                     .value = json_value,
@@ -81,13 +81,13 @@ pub const YamlParser = struct {
                 };
             }
         }
-        
+
         // Extract specific fields if requested
         const final_value = if (options.extract_fields) |fields|
             try parser.utils.extractFields(allocator, json_value, fields)
         else
             json_value;
-        
+
         return parser.ParseResult{
             .value = final_value,
             .format = .yaml,
@@ -96,41 +96,43 @@ pub const YamlParser = struct {
             .allocator = allocator,
         };
     }
-    
+
     fn yamlCanParse(base: *parser.Parser, input: []const u8) bool {
         _ = base;
-        
+
         // Check for YAML indicators
         const trimmed = std.mem.trim(u8, input, " \t\r\n");
-        
+
         // Look for YAML markers
         if (std.mem.startsWith(u8, trimmed, "---")) return true;
-        
+
         // Check for YAML in code blocks
         if (parser.utils.extractCodeBlock(input, "yaml") != null or
-            parser.utils.extractCodeBlock(input, "yml") != null) {
+            parser.utils.extractCodeBlock(input, "yml") != null)
+        {
             return true;
         }
-        
+
         // Simple heuristic: contains colon followed by space or newline
         if (std.mem.indexOf(u8, trimmed, ": ") != null or
-            std.mem.indexOf(u8, trimmed, ":\n") != null) {
+            std.mem.indexOf(u8, trimmed, ":\n") != null)
+        {
             return true;
         }
-        
+
         return false;
     }
-    
+
     fn yamlGetFormat(base: *parser.Parser) parser.ParseOptions.Format {
         _ = base;
         return .yaml;
     }
-    
+
     fn yamlGetName(base: *parser.Parser) []const u8 {
         _ = base;
         return "YAML Parser";
     }
-    
+
     fn yamlDeinit(base: *parser.Parser) void {
         const self: *YamlParser = @fieldParentPtr("base", base);
         _ = self;
@@ -142,42 +144,42 @@ fn parseYamlToJson(allocator: std.mem.Allocator, yaml: []const u8) !std.json.Val
     var lines = std.mem.tokenize(u8, yaml, "\n");
     var stack = std.ArrayList(YamlContext).init(allocator);
     defer stack.deinit();
-    
+
     // Start with root object
     var root = std.json.ObjectMap.init(allocator);
     try stack.append(YamlContext{
         .value = .{ .object = &root },
         .indent = 0,
     });
-    
+
     var line_number: u32 = 0;
     while (lines.next()) |line| : (line_number += 1) {
         const trimmed = std.mem.trimRight(u8, line, " \t\r");
         if (trimmed.len == 0) continue;
-        
+
         // Skip comments
         if (std.mem.startsWith(u8, std.mem.trimLeft(u8, trimmed, " \t"), "#")) continue;
-        
+
         // Calculate indentation
         const indent = getIndentation(line);
-        
+
         // Handle different line types
         if (std.mem.startsWith(u8, trimmed[indent..], "- ")) {
             // List item
-            try handleListItem(allocator, &stack, trimmed[indent + 2..], indent);
+            try handleListItem(allocator, &stack, trimmed[indent + 2 ..], indent);
         } else if (std.mem.indexOf(u8, trimmed[indent..], ": ")) |colon_pos| {
             // Key-value pair
-            const key = std.mem.trim(u8, trimmed[indent..indent + colon_pos], " \t");
-            const value_part = trimmed[indent + colon_pos + 2..]; // Skip ": "
-            
+            const key = std.mem.trim(u8, trimmed[indent .. indent + colon_pos], " \t");
+            const value_part = trimmed[indent + colon_pos + 2 ..]; // Skip ": "
+
             try handleKeyValue(allocator, &stack, key, value_part, indent);
         } else if (std.mem.endsWith(u8, trimmed, ":")) {
             // Key with no value (object or array to follow)
-            const key = std.mem.trim(u8, trimmed[indent..trimmed.len - 1], " \t");
+            const key = std.mem.trim(u8, trimmed[indent .. trimmed.len - 1], " \t");
             try handleKeyOnly(allocator, &stack, key, indent);
         }
     }
-    
+
     return std.json.Value{ .object = root };
 }
 
@@ -214,9 +216,9 @@ fn handleListItem(
     while (stack.items.len > 1 and stack.items[stack.items.len - 1].indent > indent) {
         _ = stack.pop();
     }
-    
+
     const current = &stack.items[stack.items.len - 1];
-    
+
     // Ensure we have an array context
     var array: *std.json.Array = undefined;
     switch (current.value) {
@@ -227,7 +229,7 @@ fn handleListItem(
                 const new_array = std.json.Array.init(allocator);
                 try obj.put(key, std.json.Value{ .array = new_array });
                 array = &obj.getPtr(key).?.array;
-                
+
                 // Update context
                 current.value = .{ .array = array };
             } else {
@@ -235,7 +237,7 @@ fn handleListItem(
             }
         },
     }
-    
+
     // Parse and add the value
     const value = try parseYamlValue(allocator, value_str);
     try array.append(value);
@@ -252,9 +254,9 @@ fn handleKeyValue(
     while (stack.items.len > 1 and stack.items[stack.items.len - 1].indent >= indent) {
         _ = stack.pop();
     }
-    
+
     const current = &stack.items[stack.items.len - 1];
-    
+
     switch (current.value) {
         .object => |obj| {
             const value = try parseYamlValue(allocator, value_str);
@@ -274,15 +276,15 @@ fn handleKeyOnly(
     while (stack.items.len > 1 and stack.items[stack.items.len - 1].indent >= indent) {
         _ = stack.pop();
     }
-    
+
     const current = &stack.items[stack.items.len - 1];
-    
+
     switch (current.value) {
         .object => |obj| {
             // Create new object for this key
             const new_obj = std.json.ObjectMap.init(allocator);
             try obj.put(try allocator.dupe(u8, key), std.json.Value{ .object = new_obj });
-            
+
             // Push new context
             try stack.append(YamlContext{
                 .value = .{ .object = &obj.getPtr(key).?.object },
@@ -296,42 +298,45 @@ fn handleKeyOnly(
 
 fn parseYamlValue(allocator: std.mem.Allocator, value_str: []const u8) !std.json.Value {
     const trimmed = std.mem.trim(u8, value_str, " \t");
-    
+
     // Empty value
     if (trimmed.len == 0) {
         return std.json.Value{ .null = {} };
     }
-    
+
     // Quoted strings
     if ((trimmed[0] == '"' and trimmed[trimmed.len - 1] == '"') or
-        (trimmed[0] == '\'' and trimmed[trimmed.len - 1] == '\'')) {
-        return std.json.Value{ .string = try allocator.dupe(u8, trimmed[1..trimmed.len - 1]) };
+        (trimmed[0] == '\'' and trimmed[trimmed.len - 1] == '\''))
+    {
+        return std.json.Value{ .string = try allocator.dupe(u8, trimmed[1 .. trimmed.len - 1]) };
     }
-    
+
     // Boolean
-    if (std.mem.eql(u8, trimmed, "true") or std.mem.eql(u8, trimmed, "yes") or 
-        std.mem.eql(u8, trimmed, "on")) {
+    if (std.mem.eql(u8, trimmed, "true") or std.mem.eql(u8, trimmed, "yes") or
+        std.mem.eql(u8, trimmed, "on"))
+    {
         return std.json.Value{ .bool = true };
     }
-    if (std.mem.eql(u8, trimmed, "false") or std.mem.eql(u8, trimmed, "no") or 
-        std.mem.eql(u8, trimmed, "off")) {
+    if (std.mem.eql(u8, trimmed, "false") or std.mem.eql(u8, trimmed, "no") or
+        std.mem.eql(u8, trimmed, "off"))
+    {
         return std.json.Value{ .bool = false };
     }
-    
+
     // Null
     if (std.mem.eql(u8, trimmed, "null") or std.mem.eql(u8, trimmed, "~")) {
         return std.json.Value{ .null = {} };
     }
-    
+
     // Number
     if (std.fmt.parseInt(i64, trimmed, 10)) |int_val| {
         return std.json.Value{ .integer = int_val };
     } else |_| {}
-    
+
     if (std.fmt.parseFloat(f64, trimmed)) |float_val| {
         return std.json.Value{ .float = float_val };
     } else |_| {}
-    
+
     // Default to string
     return std.json.Value{ .string = try allocator.dupe(u8, trimmed) };
 }
@@ -339,19 +344,19 @@ fn parseYamlValue(allocator: std.mem.Allocator, value_str: []const u8) !std.json
 // Tests
 test "YAML parser basic" {
     const allocator = std.testing.allocator;
-    
+
     var yaml_parser = YamlParser.init(allocator);
     defer yaml_parser.deinit();
-    
+
     const input =
         \\name: John Doe
         \\age: 30
         \\active: true
     ;
-    
+
     var result = try yaml_parser.base.parse(input, .{}, allocator);
     defer result.deinit();
-    
+
     try std.testing.expect(result.success);
     try std.testing.expectEqual(parser.ParseOptions.Format.yaml, result.format);
     try std.testing.expectEqualStrings("John Doe", result.value.object.get("name").?.string);
@@ -361,22 +366,22 @@ test "YAML parser basic" {
 
 test "YAML parser with nested objects" {
     const allocator = std.testing.allocator;
-    
+
     var yaml_parser = YamlParser.init(allocator);
     defer yaml_parser.deinit();
-    
+
     const input =
         \\user:
         \\  name: Alice
         \\  email: alice@example.com
         \\status: active
     ;
-    
+
     var result = try yaml_parser.base.parse(input, .{}, allocator);
     defer result.deinit();
-    
+
     try std.testing.expect(result.success);
-    
+
     const user = result.value.object.get("user").?.object;
     try std.testing.expectEqualStrings("Alice", user.get("name").?.string);
     try std.testing.expectEqualStrings("alice@example.com", user.get("email").?.string);
@@ -385,10 +390,10 @@ test "YAML parser with nested objects" {
 
 test "YAML parser with arrays" {
     const allocator = std.testing.allocator;
-    
+
     var yaml_parser = YamlParser.init(allocator);
     defer yaml_parser.deinit();
-    
+
     const input =
         \\items:
         \\  - apple
@@ -396,12 +401,12 @@ test "YAML parser with arrays" {
         \\  - orange
         \\count: 3
     ;
-    
+
     var result = try yaml_parser.base.parse(input, .{}, allocator);
     defer result.deinit();
-    
+
     try std.testing.expect(result.success);
-    
+
     const items = result.value.object.get("items").?.array;
     try std.testing.expectEqual(@as(usize, 3), items.items.len);
     try std.testing.expectEqualStrings("apple", items.items[0].string);

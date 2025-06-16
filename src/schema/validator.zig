@@ -6,19 +6,19 @@ const std = @import("std");
 pub const Schema = struct {
     root: SchemaNode,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, root: SchemaNode) Schema {
         return Schema{
             .root = root,
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *const Schema) void {
         var mut_root = self.root;
         mut_root.deinit(self.allocator);
     }
-    
+
     pub fn validate(self: *const Schema, value: std.json.Value) !ValidationResult {
         return self.root.validate(value, self.allocator);
     }
@@ -34,7 +34,7 @@ pub const SchemaNode = union(enum) {
     any_of: []const SchemaNode,
     all_of: []const SchemaNode,
     one_of: []const SchemaNode,
-    
+
     pub fn deinit(self: *SchemaNode, allocator: std.mem.Allocator) void {
         switch (self.*) {
             .object => |*schema| {
@@ -50,7 +50,7 @@ pub const SchemaNode = union(enum) {
             else => {},
         }
     }
-    
+
     pub fn validate(self: *const SchemaNode, value: std.json.Value, allocator: std.mem.Allocator) !ValidationResult {
         switch (self.*) {
             .object => |schema| return schema.validate(value),
@@ -102,7 +102,7 @@ pub const ObjectSchema = struct {
     properties: std.StringHashMap(SchemaNode),
     required: []const []const u8,
     additional_properties: bool = true,
-    
+
     pub fn deinit(self: *ObjectSchema, allocator: std.mem.Allocator) void {
         var iter = self.properties.iterator();
         while (iter.next()) |entry| {
@@ -114,7 +114,7 @@ pub const ObjectSchema = struct {
             allocator.free(self.required);
         }
     }
-    
+
     pub fn validate(self: *const ObjectSchema, value: std.json.Value) !ValidationResult {
         if (value != .object) {
             return ValidationResult{
@@ -122,7 +122,7 @@ pub const ObjectSchema = struct {
                 .errors = &[_]ValidationError{.{ .message = "Expected object" }},
             };
         }
-        
+
         // Check required properties
         for (self.required) |prop| {
             if (value.object.get(prop) == null) {
@@ -132,13 +132,13 @@ pub const ObjectSchema = struct {
                 };
             }
         }
-        
+
         // Validate property schemas
         var iter = self.properties.iterator();
         while (iter.next()) |entry| {
             const prop_name = entry.key_ptr.*;
             const prop_schema = entry.value_ptr.*;
-            
+
             if (value.object.get(prop_name)) |prop_value| {
                 const result = try prop_schema.validate(prop_value, self.properties.allocator);
                 if (!result.valid) {
@@ -146,7 +146,7 @@ pub const ObjectSchema = struct {
                 }
             }
         }
-        
+
         // Check for additional properties if not allowed
         if (!self.additional_properties) {
             var obj_iter = value.object.iterator();
@@ -154,15 +154,12 @@ pub const ObjectSchema = struct {
                 if (!self.properties.contains(entry.key_ptr.*)) {
                     return ValidationResult{
                         .valid = false,
-                        .errors = &[_]ValidationError{.{ 
-                            .message = "Additional properties not allowed", 
-                            .path = entry.key_ptr.* 
-                        }},
+                        .errors = &[_]ValidationError{.{ .message = "Additional properties not allowed", .path = entry.key_ptr.* }},
                     };
                 }
             }
         }
-        
+
         return ValidationResult{ .valid = true };
     }
 };
@@ -171,7 +168,7 @@ pub const ArraySchema = struct {
     items: ?*const SchemaNode = null,
     min_items: ?usize = null,
     max_items: ?usize = null,
-    
+
     pub fn validate(self: *const ArraySchema, value: std.json.Value) !ValidationResult {
         if (value != .array) {
             return ValidationResult{
@@ -179,7 +176,7 @@ pub const ArraySchema = struct {
                 .errors = &[_]ValidationError{.{ .message = "Expected array" }},
             };
         }
-        
+
         if (self.min_items) |min| {
             if (value.array.items.len < min) {
                 return ValidationResult{
@@ -188,7 +185,7 @@ pub const ArraySchema = struct {
                 };
             }
         }
-        
+
         if (self.max_items) |max| {
             if (value.array.items.len > max) {
                 return ValidationResult{
@@ -197,7 +194,7 @@ pub const ArraySchema = struct {
                 };
             }
         }
-        
+
         // Validate each item if item schema is provided
         if (self.items) |item_schema| {
             for (value.array.items, 0..) |item, index| {
@@ -208,15 +205,12 @@ pub const ArraySchema = struct {
                     const path = try std.fmt.bufPrint(&path_buf, "[{d}]", .{index});
                     return ValidationResult{
                         .valid = false,
-                        .errors = &[_]ValidationError{.{ 
-                            .message = result.errors[0].message, 
-                            .path = path 
-                        }},
+                        .errors = &[_]ValidationError{.{ .message = result.errors[0].message, .path = path }},
                     };
                 }
             }
         }
-        
+
         return ValidationResult{ .valid = true };
     }
 };
@@ -226,7 +220,7 @@ pub const StringSchema = struct {
     max_length: ?usize = null,
     pattern: ?[]const u8 = null,
     format: ?StringFormat = null,
-    
+
     pub const StringFormat = enum {
         date_time,
         date,
@@ -235,7 +229,7 @@ pub const StringSchema = struct {
         uri,
         uuid,
     };
-    
+
     pub fn validate(self: *const StringSchema, value: std.json.Value) !ValidationResult {
         if (value != .string) {
             return ValidationResult{
@@ -243,7 +237,7 @@ pub const StringSchema = struct {
                 .errors = &[_]ValidationError{.{ .message = "Expected string" }},
             };
         }
-        
+
         if (self.min_length) |min| {
             if (value.string.len < min) {
                 return ValidationResult{
@@ -252,7 +246,7 @@ pub const StringSchema = struct {
                 };
             }
         }
-        
+
         if (self.max_length) |max| {
             if (value.string.len > max) {
                 return ValidationResult{
@@ -261,7 +255,7 @@ pub const StringSchema = struct {
                 };
             }
         }
-        
+
         // Pattern validation (basic regex-like patterns)
         if (self.pattern) |pattern| {
             if (!matchesPattern(value.string, pattern)) {
@@ -271,7 +265,7 @@ pub const StringSchema = struct {
                 };
             }
         }
-        
+
         // Format validation
         if (self.format) |format| {
             const is_valid = switch (format) {
@@ -282,7 +276,7 @@ pub const StringSchema = struct {
                 .date_time => isValidDateTime(value.string),
                 .time => isValidTime(value.string),
             };
-            
+
             if (!is_valid) {
                 var msg_buf: [128]u8 = undefined;
                 const msg = try std.fmt.bufPrint(&msg_buf, "Invalid {s} format", .{@tagName(format)});
@@ -292,7 +286,7 @@ pub const StringSchema = struct {
                 };
             }
         }
-        
+
         return ValidationResult{ .valid = true };
     }
 };
@@ -303,7 +297,7 @@ pub const NumberSchema = struct {
     exclusive_minimum: ?f64 = null,
     exclusive_maximum: ?f64 = null,
     multiple_of: ?f64 = null,
-    
+
     pub fn validate(self: *const NumberSchema, value: std.json.Value) !ValidationResult {
         const num = switch (value) {
             .integer => |i| @as(f64, @floatFromInt(i)),
@@ -313,7 +307,7 @@ pub const NumberSchema = struct {
                 .errors = &[_]ValidationError{.{ .message = "Expected number" }},
             },
         };
-        
+
         if (self.minimum) |min| {
             if (num < min) {
                 return ValidationResult{
@@ -322,7 +316,7 @@ pub const NumberSchema = struct {
                 };
             }
         }
-        
+
         if (self.maximum) |max| {
             if (num > max) {
                 return ValidationResult{
@@ -331,7 +325,7 @@ pub const NumberSchema = struct {
                 };
             }
         }
-        
+
         if (self.exclusive_minimum) |min| {
             if (num <= min) {
                 return ValidationResult{
@@ -340,7 +334,7 @@ pub const NumberSchema = struct {
                 };
             }
         }
-        
+
         if (self.exclusive_maximum) |max| {
             if (num >= max) {
                 return ValidationResult{
@@ -349,7 +343,7 @@ pub const NumberSchema = struct {
                 };
             }
         }
-        
+
         if (self.multiple_of) |multiple| {
             const remainder = @mod(num, multiple);
             if (remainder != 0) {
@@ -359,7 +353,7 @@ pub const NumberSchema = struct {
                 };
             }
         }
-        
+
         return ValidationResult{ .valid = true };
     }
 };
@@ -409,7 +403,7 @@ fn matchesPattern(str: []const u8, pattern: []const u8) bool {
     var p_idx: usize = 0;
     var star_idx: ?usize = null;
     var s_star: usize = 0;
-    
+
     while (s_idx < str.len) {
         if (p_idx < pattern.len and (pattern[p_idx] == '?' or pattern[p_idx] == str[s_idx])) {
             s_idx += 1;
@@ -426,11 +420,11 @@ fn matchesPattern(str: []const u8, pattern: []const u8) bool {
             return false;
         }
     }
-    
+
     while (p_idx < pattern.len and pattern[p_idx] == '*') {
         p_idx += 1;
     }
-    
+
     return p_idx == pattern.len;
 }
 
@@ -438,19 +432,19 @@ fn isValidEmail(email: []const u8) bool {
     // Basic email validation
     var at_count: u32 = 0;
     var at_pos: ?usize = null;
-    
+
     for (email, 0..) |char, i| {
         if (char == '@') {
             at_count += 1;
             at_pos = i;
         }
     }
-    
+
     if (at_count != 1) return false;
     if (at_pos == null or at_pos.? == 0 or at_pos.? == email.len - 1) return false;
-    
+
     // Check for dot after @
-    const domain = email[at_pos.? + 1..];
+    const domain = email[at_pos.? + 1 ..];
     return std.mem.indexOf(u8, domain, ".") != null;
 }
 
@@ -462,17 +456,17 @@ fn isValidUri(uri: []const u8) bool {
 fn isValidUuid(uuid: []const u8) bool {
     // UUID v4 format: 8-4-4-4-12 hexadecimal digits
     if (uuid.len != 36) return false;
-    
+
     const expected_dashes = [_]usize{ 8, 13, 18, 23 };
     for (expected_dashes) |pos| {
         if (uuid[pos] != '-') return false;
     }
-    
+
     for (uuid, 0..) |char, i| {
         if (std.mem.indexOfScalar(usize, &expected_dashes, i) != null) continue;
         if (!std.ascii.isHex(char)) return false;
     }
-    
+
     return true;
 }
 
@@ -480,11 +474,11 @@ fn isValidDate(date: []const u8) bool {
     // ISO 8601 date format: YYYY-MM-DD
     if (date.len != 10) return false;
     if (date[4] != '-' or date[7] != '-') return false;
-    
+
     const year = std.fmt.parseInt(u32, date[0..4], 10) catch return false;
     const month = std.fmt.parseInt(u32, date[5..7], 10) catch return false;
     const day = std.fmt.parseInt(u32, date[8..10], 10) catch return false;
-    
+
     return year >= 1 and year <= 9999 and month >= 1 and month <= 12 and day >= 1 and day <= 31;
 }
 
@@ -492,7 +486,7 @@ fn isValidDateTime(datetime: []const u8) bool {
     // ISO 8601 datetime format: YYYY-MM-DDTHH:MM:SS[.sss][Z|+/-HH:MM]
     if (datetime.len < 19) return false;
     if (datetime[10] != 'T') return false;
-    
+
     return isValidDate(datetime[0..10]) and isValidTime(datetime[11..]);
 }
 
@@ -500,68 +494,62 @@ fn isValidTime(time: []const u8) bool {
     // Time format: HH:MM:SS[.sss]
     if (time.len < 8) return false;
     if (time[2] != ':' or time[5] != ':') return false;
-    
+
     const hour = std.fmt.parseInt(u32, time[0..2], 10) catch return false;
     const minute = std.fmt.parseInt(u32, time[3..5], 10) catch return false;
     const second = std.fmt.parseInt(u32, time[6..8], 10) catch return false;
-    
+
     return hour <= 23 and minute <= 59 and second <= 59;
 }
 
 // Tests
 test "basic type validation" {
     const allocator = std.testing.allocator;
-    
+
     // String validation
     var string_schema = Schema.init(allocator, .{ .string = StringSchema{} });
     defer string_schema.deinit();
-    
+
     const valid_string = std.json.Value{ .string = "hello" };
     const invalid_string = std.json.Value{ .integer = 42 };
-    
+
     try std.testing.expect((try string_schema.validate(valid_string)).valid);
     try std.testing.expect(!(try string_schema.validate(invalid_string)).valid);
-    
-    // Number validation  
-    var number_schema = Schema.init(allocator, .{ 
-        .number = NumberSchema{
-            .minimum = 0,
-            .maximum = 100,
-        } 
-    });
+
+    // Number validation
+    var number_schema = Schema.init(allocator, .{ .number = NumberSchema{
+        .minimum = 0,
+        .maximum = 100,
+    } });
     defer number_schema.deinit();
-    
+
     const valid_number = std.json.Value{ .integer = 50 };
     const invalid_number = std.json.Value{ .integer = 150 };
-    
+
     try std.testing.expect((try number_schema.validate(valid_number)).valid);
     try std.testing.expect(!(try number_schema.validate(invalid_number)).valid);
 }
 
 test "string format validation" {
     const allocator = std.testing.allocator;
-    
+
     // Email validation
-    var email_schema = Schema.init(allocator, .{ 
-        .string = StringSchema{ .format = .email } 
-    });
+    var email_schema = Schema.init(allocator, .{ .string = StringSchema{ .format = .email } });
     defer email_schema.deinit();
-    
+
     const valid_email = std.json.Value{ .string = "user@example.com" };
     const invalid_email = std.json.Value{ .string = "not-an-email" };
-    
+
     try std.testing.expect((try email_schema.validate(valid_email)).valid);
     try std.testing.expect(!(try email_schema.validate(invalid_email)).valid);
-    
+
     // UUID validation
-    var uuid_schema = Schema.init(allocator, .{ 
-        .string = StringSchema{ .format = .uuid } 
-    });
+    var uuid_schema = Schema.init(allocator, .{ .string = StringSchema{ .format = .uuid } });
     defer uuid_schema.deinit();
-    
+
     const valid_uuid = std.json.Value{ .string = "550e8400-e29b-41d4-a716-446655440000" };
     const invalid_uuid = std.json.Value{ .string = "not-a-uuid" };
-    
+
     try std.testing.expect((try uuid_schema.validate(valid_uuid)).valid);
     try std.testing.expect(!(try uuid_schema.validate(invalid_uuid)).valid);
 }

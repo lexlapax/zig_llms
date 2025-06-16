@@ -33,10 +33,10 @@ pub fn main() !void {
 
     // Demonstrate context creation and state pooling
     std.log.info("\n--- Testing State Pooling ---", .{});
-    
+
     const context1 = try engine.createContext("context1");
     const context2 = try engine.createContext("context2");
-    
+
     // Get initial pool stats
     const initial_stats = engine.getPoolStats();
     std.log.info("Pool stats - Available: {}, In-use: {}, Max: {}", .{
@@ -47,7 +47,7 @@ pub fn main() !void {
 
     // Test script execution with lifecycle tracking
     std.log.info("\n--- Testing Script Execution ---", .{});
-    
+
     _ = try engine.executeScript(context1, "local x = 42; return x + 8");
     std.log.info("✓ Executed script in context1", .{});
 
@@ -55,28 +55,28 @@ pub fn main() !void {
     try engine.setGlobal(context2, "test_var", zig_llms.scripting.ScriptValue{ .integer = 100 });
     const result = try engine.getGlobal(context2, "test_var");
     defer result.deinit(allocator);
-    
+
     if (result == .integer) {
         std.log.info("✓ Global variable test_var = {}", .{result.integer});
     }
 
     // Test memory usage and garbage collection
     std.log.info("\n--- Testing Memory Management ---", .{});
-    
+
     const memory_before = engine.getMemoryUsage(context1);
-    
+
     // Create some memory pressure
-    _ = try engine.executeScript(context1, 
+    _ = try engine.executeScript(context1,
         \\local big_table = {}
         \\for i = 1, 1000 do
         \\    big_table[i] = "string_" .. i
         \\end
         \\return #big_table
     );
-    
+
     const memory_after = engine.getMemoryUsage(context1);
     std.log.info("Memory usage - Before: {} bytes, After: {} bytes", .{ memory_before, memory_after });
-    
+
     // Force garbage collection
     engine.collectGarbage(context1);
     const memory_after_gc = engine.getMemoryUsage(context1);
@@ -84,16 +84,16 @@ pub fn main() !void {
 
     // Test snapshots (if available)
     std.log.info("\n--- Testing Snapshots ---", .{});
-    
+
     try engine.setGlobal(context1, "snapshot_test", zig_llms.scripting.ScriptValue{ .integer = 1 });
     try engine.createSnapshot(context1);
     std.log.info("✓ Created snapshot", .{});
-    
+
     try engine.setGlobal(context1, "snapshot_test", zig_llms.scripting.ScriptValue{ .integer = 2 });
     const changed_value = try engine.getGlobal(context1, "snapshot_test");
     defer changed_value.deinit(allocator);
     std.log.info("Changed value: {}", .{changed_value.integer});
-    
+
     try engine.restoreSnapshot(context1, 0);
     const restored_value = try engine.getGlobal(context1, "snapshot_test");
     defer restored_value.deinit(allocator);

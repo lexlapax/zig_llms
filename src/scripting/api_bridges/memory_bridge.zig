@@ -24,23 +24,23 @@ const ScriptMemoryStore = struct {
     messages: std.ArrayList(types.Message),
     max_messages: u32 = 100,
     max_tokens: ?u32 = null,
-    
+
     const MemoryType = enum {
         short_term,
         conversation,
         episodic,
         semantic,
     };
-    
+
     pub fn deinit(self: *ScriptMemoryStore) void {
         const allocator = self.context.allocator;
         allocator.free(self.id);
-        
+
         for (self.messages.items) |*msg| {
             msg.deinit();
         }
         self.messages.deinit();
-        
+
         allocator.destroy(self);
     }
 };
@@ -58,10 +58,10 @@ pub const MemoryBridge = struct {
         .init = init,
         .deinit = deinit,
     };
-    
+
     fn getModule(allocator: std.mem.Allocator) anyerror!*ScriptModule {
         const module = try allocator.create(ScriptModule);
-        
+
         module.* = ScriptModule{
             .name = "memory",
             .functions = &memory_functions,
@@ -69,25 +69,25 @@ pub const MemoryBridge = struct {
             .description = "Memory management and conversation history API",
             .version = "1.0.0",
         };
-        
+
         return module;
     }
-    
+
     fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
         _ = engine;
-        
+
         stores_mutex.lock();
         defer stores_mutex.unlock();
-        
+
         if (memory_stores == null) {
             memory_stores = std.StringHashMap(*ScriptMemoryStore).init(context.allocator);
         }
     }
-    
+
     fn deinit() void {
         stores_mutex.lock();
         defer stores_mutex.unlock();
-        
+
         if (memory_stores) |*stores| {
             var iter = stores.iterator();
             while (iter.next()) |entry| {
@@ -300,17 +300,17 @@ fn createMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const config = args[0].object;
     const context = @fieldParentPtr(ScriptContext, "allocator", config.allocator);
     const allocator = context.allocator;
-    
+
     // Extract configuration
     const store_type_str = if (config.get("type")) |t|
         try t.toZig([]const u8, allocator)
     else
         "short_term";
-        
+
     const store_type = blk: {
         if (std.mem.eql(u8, store_type_str, "short_term")) {
             break :blk ScriptMemoryStore.MemoryType.short_term;
@@ -324,23 +324,23 @@ fn createMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
             return error.InvalidMemoryType;
         }
     };
-    
+
     const max_messages = if (config.get("max_messages")) |m|
         try m.toZig(u32, allocator)
     else
         100;
-        
+
     const max_tokens = if (config.get("max_tokens")) |t|
         try t.toZig(u32, allocator)
     else
         null;
-    
+
     // Generate unique ID
     stores_mutex.lock();
     const store_id = try std.fmt.allocPrint(allocator, "memory_{}", .{next_store_id});
     next_store_id += 1;
     stores_mutex.unlock();
-    
+
     // Create memory store
     const store = try allocator.create(ScriptMemoryStore);
     store.* = ScriptMemoryStore{
@@ -351,15 +351,15 @@ fn createMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
         .max_messages = max_messages,
         .max_tokens = max_tokens,
     };
-    
+
     // Register store
     stores_mutex.lock();
     defer stores_mutex.unlock();
-    
+
     if (memory_stores) |*stores| {
         try stores.put(store_id, store);
     }
-    
+
     return ScriptValue{ .string = store_id };
 }
 
@@ -367,19 +367,19 @@ fn destroyMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
-    
+
     stores_mutex.lock();
     defer stores_mutex.unlock();
-    
+
     if (memory_stores) |*stores| {
         if (stores.fetchRemove(store_id)) |kv| {
             kv.value.deinit();
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -387,50 +387,50 @@ fn addMessage(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const message_obj = args[1].object;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
-    
+
     // Convert to Message
     const role_str = if (message_obj.get("role")) |r|
         try r.toZig([]const u8, allocator)
     else
         return error.MissingField;
-        
+
     const role = try parseRole(role_str);
-    
+
     const content_str = if (message_obj.get("content")) |c|
         try c.toZig([]const u8, allocator)
     else
         return error.MissingField;
-    
+
     var message = types.Message{
         .role = role,
         .content = std.ArrayList(types.Content).init(allocator),
     };
-    
+
     // Add text content
     const text_content = types.Content{
         .text = .{ .text = try allocator.dupe(u8, content_str) },
     };
     try message.content.append(text_content);
-    
+
     // Add to store
     try store.?.messages.append(message);
-    
+
     // Enforce limits
     if (store.?.max_messages > 0 and store.?.messages.items.len > store.?.max_messages) {
         // Remove oldest messages
@@ -441,7 +441,7 @@ fn addMessage(args: []const ScriptValue) anyerror!ScriptValue {
         std.mem.copy(types.Message, store.?.messages.items[0..], store.?.messages.items[to_remove..]);
         store.?.messages.shrinkRetainingCapacity(store.?.max_messages);
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -449,15 +449,15 @@ fn addMessageBatch(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .array) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const messages = args[1].array;
-    
+
     for (messages.items) |msg| {
         const add_args = [_]ScriptValue{ ScriptValue{ .string = store_id }, msg };
         _ = try addMessage(&add_args);
     }
-    
+
     return ScriptValue{ .integer = @intCast(messages.items.len) };
 }
 
@@ -465,28 +465,28 @@ fn getMessages(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const options = if (args[1] == .object) args[1].object else null;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
     const messages = store.?.messages.items;
-    
+
     // Apply filters if provided
     var start: usize = 0;
     var end: usize = messages.len;
-    
+
     if (options) |opts| {
         if (opts.get("offset")) |offset| {
             start = @min(try offset.toZig(usize, allocator), messages.len);
@@ -495,14 +495,14 @@ fn getMessages(args: []const ScriptValue) anyerror!ScriptValue {
             end = @min(start + try limit.toZig(usize, allocator), messages.len);
         }
     }
-    
+
     // Convert messages to ScriptValue
     var result = try ScriptValue.Array.init(allocator, end - start);
-    
+
     for (messages[start..end], 0..) |msg, i| {
         var msg_obj = ScriptValue.Object.init(allocator);
         try msg_obj.put("role", ScriptValue{ .string = try allocator.dupe(u8, @tagName(msg.role)) });
-        
+
         // Extract text content
         var content_text = std.ArrayList(u8).init(allocator);
         for (msg.content.items) |content| {
@@ -511,11 +511,11 @@ fn getMessages(args: []const ScriptValue) anyerror!ScriptValue {
                 else => {},
             }
         }
-        
+
         try msg_obj.put("content", ScriptValue{ .string = try content_text.toOwnedSlice() });
         result.items[i] = ScriptValue{ .object = msg_obj };
     }
-    
+
     return ScriptValue{ .array = result };
 }
 
@@ -523,34 +523,34 @@ fn getLastMessages(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .integer) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const count = @as(usize, @intCast(args[1].integer));
     const allocator = @fieldParentPtr(ScriptContext, "allocator", store_id).allocator;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const messages = store.?.messages.items;
     const start = if (messages.len > count) messages.len - count else 0;
-    
+
     var options = ScriptValue.Object.init(allocator);
     try options.put("offset", ScriptValue{ .integer = @intCast(start) });
     try options.put("limit", ScriptValue{ .integer = @intCast(count) });
-    
+
     const get_args = [_]ScriptValue{
         ScriptValue{ .string = store_id },
         ScriptValue{ .object = options },
     };
-    
+
     return try getMessages(&get_args);
 }
 
@@ -558,31 +558,31 @@ fn getMessagesByRole(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const role_str = args[1].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
     const role = try parseRole(role_str);
-    
+
     var filtered = std.ArrayList(ScriptValue).init(allocator);
-    
+
     for (store.?.messages.items) |msg| {
         if (msg.role == role) {
             var msg_obj = ScriptValue.Object.init(allocator);
             try msg_obj.put("role", ScriptValue{ .string = try allocator.dupe(u8, @tagName(msg.role)) });
-            
+
             // Extract text content
             var content_text = std.ArrayList(u8).init(allocator);
             for (msg.content.items) |content| {
@@ -591,12 +591,12 @@ fn getMessagesByRole(args: []const ScriptValue) anyerror!ScriptValue {
                     else => {},
                 }
             }
-            
+
             try msg_obj.put("content", ScriptValue{ .string = try content_text.toOwnedSlice() });
             try filtered.append(ScriptValue{ .object = msg_obj });
         }
     }
-    
+
     return ScriptValue{ .array = .{ .items = try filtered.toOwnedSlice(), .allocator = allocator } };
 }
 
@@ -604,35 +604,35 @@ fn searchMessages(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const query = args[1].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
     var results = std.ArrayList(ScriptValue).init(allocator);
-    
+
     for (store.?.messages.items) |msg| {
         var content_text = std.ArrayList(u8).init(allocator);
         defer content_text.deinit();
-        
+
         for (msg.content.items) |content| {
             switch (content) {
                 .text => |text| try content_text.appendSlice(text.text),
                 else => {},
             }
         }
-        
+
         if (std.mem.containsAtLeast(u8, content_text.items, 1, query)) {
             var msg_obj = ScriptValue.Object.init(allocator);
             try msg_obj.put("role", ScriptValue{ .string = try allocator.dupe(u8, @tagName(msg.role)) });
@@ -640,7 +640,7 @@ fn searchMessages(args: []const ScriptValue) anyerror!ScriptValue {
             try results.append(ScriptValue{ .object = msg_obj });
         }
     }
-    
+
     return ScriptValue{ .array = .{ .items = try results.toOwnedSlice(), .allocator = allocator } };
 }
 
@@ -648,25 +648,25 @@ fn clearMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     for (store.?.messages.items) |*msg| {
         msg.deinit();
     }
     store.?.messages.clearRetainingCapacity();
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -674,21 +674,21 @@ fn truncateMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .integer) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const max_size = @as(usize, @intCast(args[1].integer));
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     if (store.?.messages.items.len > max_size) {
         const to_remove = store.?.messages.items.len - max_size;
         for (store.?.messages.items[0..to_remove]) |*msg| {
@@ -697,7 +697,7 @@ fn truncateMemory(args: []const ScriptValue) anyerror!ScriptValue {
         std.mem.copy(types.Message, store.?.messages.items[0..], store.?.messages.items[to_remove..]);
         store.?.messages.shrinkRetainingCapacity(max_size);
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -705,32 +705,32 @@ fn getMemorySize(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
     var size_info = ScriptValue.Object.init(allocator);
-    
+
     try size_info.put("message_count", ScriptValue{ .integer = @intCast(store.?.messages.items.len) });
     try size_info.put("max_messages", ScriptValue{ .integer = @intCast(store.?.max_messages) });
-    
+
     if (store.?.max_tokens) |max_tokens| {
         try size_info.put("max_tokens", ScriptValue{ .integer = @intCast(max_tokens) });
     } else {
         try size_info.put("max_tokens", ScriptValue.nil);
     }
-    
+
     return ScriptValue{ .object = size_info };
 }
 
@@ -738,20 +738,20 @@ fn getTokenCount(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     // Estimate token count (simplified - 4 chars per token)
     var total_chars: usize = 0;
     for (store.?.messages.items) |msg| {
@@ -762,7 +762,7 @@ fn getTokenCount(args: []const ScriptValue) anyerror!ScriptValue {
             }
         }
     }
-    
+
     const estimated_tokens = total_chars / 4;
     return ScriptValue{ .integer = @intCast(estimated_tokens) };
 }
@@ -771,16 +771,16 @@ fn summarizeMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", store_id).allocator;
-    
+
     // Create a placeholder summary
     var summary = ScriptValue.Object.init(allocator);
     try summary.put("store_id", ScriptValue{ .string = try allocator.dupe(u8, store_id) });
     try summary.put("summary", ScriptValue{ .string = try allocator.dupe(u8, "Conversation summary placeholder") });
     try summary.put("key_points", ScriptValue{ .array = try ScriptValue.Array.init(allocator, 0) });
-    
+
     return ScriptValue{ .object = summary };
 }
 
@@ -788,26 +788,26 @@ fn exportMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const format = args[1].string;
-    
+
     // Get all messages
     var options = ScriptValue.Object.init(undefined);
     const get_args = [_]ScriptValue{
         ScriptValue{ .string = store_id },
         ScriptValue{ .object = options },
     };
-    
+
     const messages = try getMessages(&get_args);
-    
+
     if (std.mem.eql(u8, format, "json")) {
         return messages;
     } else if (std.mem.eql(u8, format, "text")) {
         // Convert to text format
         const allocator = @fieldParentPtr(ScriptContext, "allocator", store_id).allocator;
         var text = std.ArrayList(u8).init(allocator);
-        
+
         if (messages == .array) {
             for (messages.array.items) |msg| {
                 if (msg == .object) {
@@ -826,10 +826,10 @@ fn exportMemory(args: []const ScriptValue) anyerror!ScriptValue {
                 }
             }
         }
-        
+
         return ScriptValue{ .string = try text.toOwnedSlice() };
     }
-    
+
     return messages;
 }
 
@@ -837,14 +837,14 @@ fn importMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const data = args[1];
-    
+
     // Clear existing messages
     const clear_args = [_]ScriptValue{ScriptValue{ .string = store_id }};
     _ = try clearMemory(&clear_args);
-    
+
     // Import messages
     if (data == .array) {
         const batch_args = [_]ScriptValue{
@@ -853,7 +853,7 @@ fn importMemory(args: []const ScriptValue) anyerror!ScriptValue {
         };
         return try addMessageBatch(&batch_args);
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -861,19 +861,19 @@ fn mergeMemoryStores(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store1_id = args[0].string;
     const store2_id = args[1].string;
-    
+
     // Get messages from store2
     var options = ScriptValue.Object.init(undefined);
     const get_args = [_]ScriptValue{
         ScriptValue{ .string = store2_id },
         ScriptValue{ .object = options },
     };
-    
+
     const messages = try getMessages(&get_args);
-    
+
     // Add to store1
     if (messages == .array) {
         const batch_args = [_]ScriptValue{
@@ -882,7 +882,7 @@ fn mergeMemoryStores(args: []const ScriptValue) anyerror!ScriptValue {
         };
         _ = try addMessageBatch(&batch_args);
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -890,39 +890,39 @@ fn forkMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const source_id = args[0].string;
-    
+
     stores_mutex.lock();
     const source_store = if (memory_stores) |*stores|
         stores.get(source_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (source_store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = source_store.?.context.allocator;
-    
+
     // Create new store with same configuration
     var config = ScriptValue.Object.init(allocator);
     try config.put("type", ScriptValue{ .string = try allocator.dupe(u8, @tagName(source_store.?.store_type)) });
     try config.put("max_messages", ScriptValue{ .integer = @intCast(source_store.?.max_messages) });
-    
+
     const create_args = [_]ScriptValue{ScriptValue{ .object = config }};
     const new_store_id = try createMemoryStore(&create_args);
-    
+
     // Copy messages
     var options = ScriptValue.Object.init(undefined);
     const get_args = [_]ScriptValue{
         ScriptValue{ .string = source_id },
         ScriptValue{ .object = options },
     };
-    
+
     const messages = try getMessages(&get_args);
-    
+
     if (messages == .array) {
         const batch_args = [_]ScriptValue{
             new_store_id,
@@ -930,7 +930,7 @@ fn forkMemoryStore(args: []const ScriptValue) anyerror!ScriptValue {
         };
         _ = try addMessageBatch(&batch_args);
     }
-    
+
     return new_store_id;
 }
 
@@ -938,24 +938,24 @@ fn snapshotMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", store_id).allocator;
-    
+
     // Export memory as snapshot
     const export_args = [_]ScriptValue{
         ScriptValue{ .string = store_id },
         ScriptValue{ .string = "json" },
     };
-    
+
     const snapshot_data = try exportMemory(&export_args);
-    
+
     // Create snapshot object
     var snapshot = ScriptValue.Object.init(allocator);
     try snapshot.put("store_id", ScriptValue{ .string = try allocator.dupe(u8, store_id) });
     try snapshot.put("timestamp", ScriptValue{ .integer = std.time.timestamp() });
     try snapshot.put("data", snapshot_data);
-    
+
     return ScriptValue{ .object = snapshot };
 }
 
@@ -963,10 +963,10 @@ fn restoreSnapshot(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const snapshot = args[1].object;
-    
+
     if (snapshot.get("data")) |data| {
         const import_args = [_]ScriptValue{
             ScriptValue{ .string = store_id },
@@ -974,20 +974,20 @@ fn restoreSnapshot(args: []const ScriptValue) anyerror!ScriptValue {
         };
         return try importMemory(&import_args);
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
 fn listMemoryStores(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     stores_mutex.lock();
     defer stores_mutex.unlock();
-    
+
     if (memory_stores) |*stores| {
         const allocator = stores.allocator;
         var list = try ScriptValue.Array.init(allocator, stores.count());
-        
+
         var iter = stores.iterator();
         var i: usize = 0;
         while (iter.next()) |entry| : (i += 1) {
@@ -997,10 +997,10 @@ fn listMemoryStores(args: []const ScriptValue) anyerror!ScriptValue {
             try store_info.put("message_count", ScriptValue{ .integer = @intCast(entry.value_ptr.*.messages.items.len) });
             list.items[i] = ScriptValue{ .object = store_info };
         }
-        
+
         return ScriptValue{ .array = list };
     }
-    
+
     return ScriptValue{ .array = ScriptValue.Array{ .items = &[_]ScriptValue{}, .allocator = undefined } };
 }
 
@@ -1008,31 +1008,31 @@ fn setMemoryLimit(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
     const limits = args[1].object;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     const allocator = store.?.context.allocator;
-    
+
     if (limits.get("max_messages")) |max_msgs| {
         store.?.max_messages = try max_msgs.toZig(u32, allocator);
     }
-    
+
     if (limits.get("max_tokens")) |max_toks| {
         store.?.max_tokens = try max_toks.toZig(u32, allocator);
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -1040,23 +1040,23 @@ fn optimizeMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const store_id = args[0].string;
-    
+
     stores_mutex.lock();
     const store = if (memory_stores) |*stores|
         stores.get(store_id)
     else
         null;
     stores_mutex.unlock();
-    
+
     if (store == null) {
         return error.MemoryStoreNotFound;
     }
-    
+
     // Shrink to fit
     store.?.messages.shrinkAndFree(store.?.messages.items.len);
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -1079,10 +1079,10 @@ fn parseRole(role_str: []const u8) !types.Role {
 test "MemoryBridge module creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     const module = try MemoryBridge.getModule(allocator);
     defer allocator.destroy(module);
-    
+
     try testing.expectEqualStrings("memory", module.name);
     try testing.expect(module.functions.len > 0);
     try testing.expect(module.constants.len > 0);

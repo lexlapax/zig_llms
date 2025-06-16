@@ -12,41 +12,41 @@ pub const WorkflowStep = union(enum) {
     parallel: ParallelStep,
     loop: LoopStep,
     script: ScriptStep,
-    
+
     pub const AgentStep = struct {
         id: []const u8,
         agent: *Agent,
         input_mapping: ?[]const u8 = null,
         output_mapping: ?[]const u8 = null,
     };
-    
+
     pub const ToolStep = struct {
         id: []const u8,
         tool_name: []const u8,
         input_mapping: ?[]const u8 = null,
         output_mapping: ?[]const u8 = null,
     };
-    
+
     pub const ConditionalStep = struct {
         id: []const u8,
         condition: []const u8, // Expression to evaluate
         if_true: []const WorkflowStep,
         if_false: []const WorkflowStep,
     };
-    
+
     pub const ParallelStep = struct {
         id: []const u8,
         steps: []const WorkflowStep,
         aggregation: AggregationType,
     };
-    
+
     pub const LoopStep = struct {
         id: []const u8,
         condition: []const u8, // Continue while this is true
         body: []const WorkflowStep,
         max_iterations: u32 = 100,
     };
-    
+
     pub const ScriptStep = struct {
         id: []const u8,
         script: []const u8,
@@ -70,7 +70,7 @@ pub const WorkflowDefinition = struct {
     version: []const u8,
     steps: []const WorkflowStep,
     metadata: std.json.Value,
-    
+
     pub fn validate(self: *const WorkflowDefinition) !void {
         // TODO: Validate workflow definition
         _ = self;
@@ -80,25 +80,25 @@ pub const WorkflowDefinition = struct {
 pub const WorkflowEngine = struct {
     allocator: std.mem.Allocator,
     context: *RunContext,
-    
+
     pub fn init(allocator: std.mem.Allocator, context: *RunContext) WorkflowEngine {
         return WorkflowEngine{
             .allocator = allocator,
             .context = context,
         };
     }
-    
+
     pub fn execute(self: *WorkflowEngine, definition: WorkflowDefinition, input: std.json.Value) !std.json.Value {
         try definition.validate();
-        
+
         var current_state = input;
         for (definition.steps) |step| {
             current_state = try self.executeStep(step, current_state);
         }
-        
+
         return current_state;
     }
-    
+
     fn executeStep(self: *WorkflowEngine, step: WorkflowStep, input: std.json.Value) !std.json.Value {
         switch (step) {
             .agent => |agent_step| {
@@ -121,21 +121,21 @@ pub const WorkflowEngine = struct {
             },
         }
     }
-    
+
     fn executeAgentStep(self: *WorkflowEngine, step: WorkflowStep.AgentStep, input: std.json.Value) !std.json.Value {
-        const mapped_input = if (step.input_mapping) |mapping| 
-            try self.mapInput(input, mapping) 
-        else 
+        const mapped_input = if (step.input_mapping) |mapping|
+            try self.mapInput(input, mapping)
+        else
             input;
-        
+
         const result = try step.agent.execute(self.context, mapped_input);
-        
-        return if (step.output_mapping) |mapping| 
-            try self.mapOutput(result, mapping) 
-        else 
+
+        return if (step.output_mapping) |mapping|
+            try self.mapOutput(result, mapping)
+        else
             result;
     }
-    
+
     fn executeToolStep(self: *WorkflowEngine, step: WorkflowStep.ToolStep, input: std.json.Value) !std.json.Value {
         _ = self;
         _ = step;
@@ -143,20 +143,20 @@ pub const WorkflowEngine = struct {
         // TODO: Implement tool execution
         return std.json.Value{ .null = {} };
     }
-    
+
     fn executeConditionalStep(self: *WorkflowEngine, step: WorkflowStep.ConditionalStep, input: std.json.Value) !std.json.Value {
         const condition_result = try self.evaluateCondition(step.condition, input);
-        
+
         const steps_to_execute = if (condition_result) step.if_true else step.if_false;
-        
+
         var current_state = input;
         for (steps_to_execute) |substep| {
             current_state = try self.executeStep(substep, current_state);
         }
-        
+
         return current_state;
     }
-    
+
     fn executeParallelStep(self: *WorkflowEngine, step: WorkflowStep.ParallelStep, input: std.json.Value) !std.json.Value {
         _ = self;
         _ = step;
@@ -164,25 +164,25 @@ pub const WorkflowEngine = struct {
         // TODO: Implement parallel execution with thread pool
         return std.json.Value{ .null = {} };
     }
-    
+
     fn executeLoopStep(self: *WorkflowEngine, step: WorkflowStep.LoopStep, input: std.json.Value) !std.json.Value {
         var current_state = input;
         var iterations: u32 = 0;
-        
+
         while (iterations < step.max_iterations) {
             const should_continue = try self.evaluateCondition(step.condition, current_state);
             if (!should_continue) break;
-            
+
             for (step.body) |substep| {
                 current_state = try self.executeStep(substep, current_state);
             }
-            
+
             iterations += 1;
         }
-        
+
         return current_state;
     }
-    
+
     fn executeScriptStep(self: *WorkflowEngine, step: WorkflowStep.ScriptStep, input: std.json.Value) !std.json.Value {
         _ = self;
         _ = step;
@@ -190,21 +190,21 @@ pub const WorkflowEngine = struct {
         // TODO: Implement script execution via script handlers
         return std.json.Value{ .null = {} };
     }
-    
+
     fn mapInput(self: *WorkflowEngine, input: std.json.Value, mapping: []const u8) !std.json.Value {
         _ = self;
         _ = mapping;
         // TODO: Implement input mapping (JSONPath or similar)
         return input;
     }
-    
+
     fn mapOutput(self: *WorkflowEngine, output: std.json.Value, mapping: []const u8) !std.json.Value {
         _ = self;
         _ = mapping;
         // TODO: Implement output mapping
         return output;
     }
-    
+
     fn evaluateCondition(self: *WorkflowEngine, condition: []const u8, context: std.json.Value) !bool {
         _ = self;
         _ = condition;
@@ -229,7 +229,7 @@ test "workflow definition" {
         .steps = &[_]WorkflowStep{},
         .metadata = std.json.Value{ .null = {} },
     };
-    
+
     try def.validate();
     try std.testing.expectEqualStrings("test_workflow", def.id);
 }

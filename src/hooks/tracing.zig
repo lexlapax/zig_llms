@@ -17,8 +17,8 @@ pub const SpanId = [8]u8;
 pub const SpanStatus = enum {
     unset,
     ok,
-    error,
-    
+    err,
+
     pub fn toString(self: SpanStatus) []const u8 {
         return @tagName(self);
     }
@@ -31,7 +31,7 @@ pub const SpanKind = enum {
     client,
     producer,
     consumer,
-    
+
     pub fn toString(self: SpanKind) []const u8 {
         return @tagName(self);
     }
@@ -56,7 +56,7 @@ pub const SpanEvent = struct {
     name: []const u8,
     timestamp: i64,
     attributes: SpanAttributes,
-    
+
     pub fn init(allocator: std.mem.Allocator, name: []const u8) SpanEvent {
         return .{
             .name = name,
@@ -64,7 +64,7 @@ pub const SpanEvent = struct {
             .attributes = SpanAttributes.init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *SpanEvent) void {
         self.attributes.deinit();
     }
@@ -75,7 +75,7 @@ pub const SpanLink = struct {
     trace_id: TraceId,
     span_id: SpanId,
     attributes: SpanAttributes,
-    
+
     pub fn init(allocator: std.mem.Allocator, trace_id: TraceId, span_id: SpanId) SpanLink {
         return .{
             .trace_id = trace_id,
@@ -83,7 +83,7 @@ pub const SpanLink = struct {
             .attributes = SpanAttributes.init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *SpanLink) void {
         self.attributes.deinit();
     }
@@ -104,7 +104,7 @@ pub const Span = struct {
     events: std.ArrayList(SpanEvent),
     links: std.ArrayList(SpanLink),
     allocator: std.mem.Allocator,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         trace_id: TraceId,
@@ -128,7 +128,7 @@ pub const Span = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *Span) void {
         self.attributes.deinit();
         for (self.events.items) |*event| {
@@ -140,30 +140,30 @@ pub const Span = struct {
         }
         self.links.deinit();
     }
-    
+
     pub fn end(self: *Span) void {
         if (self.end_time == null) {
             self.end_time = std.time.microTimestamp();
         }
     }
-    
+
     pub fn setStatus(self: *Span, status: SpanStatus, message: ?[]const u8) void {
         self.status = status;
         self.status_message = message;
     }
-    
+
     pub fn setAttribute(self: *Span, key: []const u8, value: AttributeValue) !void {
         try self.attributes.put(key, value);
     }
-    
+
     pub fn addEvent(self: *Span, event: SpanEvent) !void {
         try self.events.append(event);
     }
-    
+
     pub fn addLink(self: *Span, link: SpanLink) !void {
         try self.links.append(link);
     }
-    
+
     pub fn duration(self: *const Span) ?i64 {
         if (self.end_time) |end| {
             return end - self.start_time;
@@ -178,7 +178,7 @@ pub const TraceContext = struct {
     span_id: SpanId,
     trace_flags: u8,
     trace_state: ?[]const u8,
-    
+
     pub fn init(trace_id: TraceId, span_id: SpanId) TraceContext {
         return .{
             .trace_id = trace_id,
@@ -187,19 +187,19 @@ pub const TraceContext = struct {
             .trace_state = null,
         };
     }
-    
+
     pub fn generateTraceId() TraceId {
         var id: TraceId = undefined;
         std.crypto.random.bytes(&id);
         return id;
     }
-    
+
     pub fn generateSpanId() SpanId {
         var id: SpanId = undefined;
         std.crypto.random.bytes(&id);
         return id;
     }
-    
+
     // W3C Trace Context format
     pub fn toW3CHeader(self: *const TraceContext, allocator: std.mem.Allocator) ![]u8 {
         return std.fmt.allocPrint(
@@ -212,32 +212,32 @@ pub const TraceContext = struct {
             },
         );
     }
-    
+
     pub fn fromW3CHeader(header: []const u8) !TraceContext {
         if (header.len < 55) return error.InvalidTraceHeader;
-        
+
         var parts = std.mem.tokenize(u8, header, "-");
-        
+
         const version = parts.next() orelse return error.InvalidTraceHeader;
         if (!std.mem.eql(u8, version, "00")) return error.UnsupportedVersion;
-        
+
         const trace_id_str = parts.next() orelse return error.InvalidTraceHeader;
         if (trace_id_str.len != 32) return error.InvalidTraceId;
-        
+
         const span_id_str = parts.next() orelse return error.InvalidTraceHeader;
         if (span_id_str.len != 16) return error.InvalidSpanId;
-        
+
         const flags_str = parts.next() orelse return error.InvalidTraceHeader;
         if (flags_str.len != 2) return error.InvalidFlags;
-        
+
         var trace_id: TraceId = undefined;
         _ = try std.fmt.hexToBytes(&trace_id, trace_id_str);
-        
+
         var span_id: SpanId = undefined;
         _ = try std.fmt.hexToBytes(&span_id, span_id_str);
-        
+
         const trace_flags = try std.fmt.parseInt(u8, flags_str, 16);
-        
+
         return TraceContext{
             .trace_id = trace_id,
             .span_id = span_id,
@@ -250,26 +250,26 @@ pub const TraceContext = struct {
 // Span processor interface
 pub const SpanProcessor = struct {
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
         onStart: *const fn (processor: *SpanProcessor, span: *Span) void,
         onEnd: *const fn (processor: *SpanProcessor, span: *Span) void,
         forceFlush: *const fn (processor: *SpanProcessor) anyerror!void,
         shutdown: *const fn (processor: *SpanProcessor) void,
     };
-    
+
     pub fn onStart(self: *SpanProcessor, span: *Span) void {
         self.vtable.onStart(self, span);
     }
-    
+
     pub fn onEnd(self: *SpanProcessor, span: *Span) void {
         self.vtable.onEnd(self, span);
     }
-    
+
     pub fn forceFlush(self: *SpanProcessor) !void {
         return self.vtable.forceFlush(self);
     }
-    
+
     pub fn shutdown(self: *SpanProcessor) void {
         self.vtable.shutdown(self);
     }
@@ -278,16 +278,16 @@ pub const SpanProcessor = struct {
 // Span exporter interface
 pub const SpanExporter = struct {
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
-        export: *const fn (exporter: *SpanExporter, spans: []const *Span) anyerror!void,
+        exportSpans: *const fn (exporter: *SpanExporter, spans: []const *Span) anyerror!void,
         shutdown: *const fn (exporter: *SpanExporter) void,
     };
-    
-    pub fn export(self: *SpanExporter, spans: []const *Span) !void {
-        return self.vtable.export(self, spans);
+
+    pub fn exportSpans(self: *SpanExporter, spans: []const *Span) !void {
+        return self.vtable.exportSpans(self, spans);
     }
-    
+
     pub fn shutdown(self: *SpanExporter) void {
         self.vtable.shutdown(self);
     }
@@ -303,7 +303,7 @@ pub const BatchSpanProcessor = struct {
     last_export: i64,
     mutex: std.Thread.Mutex,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         exporter: *SpanExporter,
@@ -330,57 +330,57 @@ pub const BatchSpanProcessor = struct {
         };
         return self;
     }
-    
+
     fn onStart(processor: *SpanProcessor, span: *Span) void {
         _ = processor;
         _ = span;
         // No action on start for batch processor
     }
-    
+
     fn onEnd(processor: *SpanProcessor, span: *Span) void {
         const self = @fieldParentPtr(BatchSpanProcessor, "processor", processor);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         self.batch.append(span) catch return;
-        
+
         // Check if we should export
         const now = std.time.milliTimestamp();
         const should_export = self.batch.items.len >= self.max_batch_size or
             (now - self.last_export) >= @as(i64, @intCast(self.export_timeout_ms));
-        
+
         if (should_export) {
             self.exportBatch() catch {};
         }
     }
-    
+
     fn forceFlush(processor: *SpanProcessor) !void {
         const self = @fieldParentPtr(BatchSpanProcessor, "processor", processor);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         try self.exportBatch();
     }
-    
+
     fn shutdown(processor: *SpanProcessor) void {
         const self = @fieldParentPtr(BatchSpanProcessor, "processor", processor);
-        
+
         self.forceFlush(processor) catch {};
         self.batch.deinit();
         self.exporter.shutdown();
         self.allocator.destroy(self);
     }
-    
+
     fn exportBatch(self: *BatchSpanProcessor) !void {
         if (self.batch.items.len == 0) return;
-        
+
         const spans = try self.allocator.dupe(*Span, self.batch.items);
         defer self.allocator.free(spans);
-        
-        try self.exporter.export(spans);
-        
+
+        try self.exporter.exportSpans(spans);
+
         self.batch.clearRetainingCapacity();
         self.last_export = std.time.milliTimestamp();
     }
@@ -391,13 +391,13 @@ pub const ConsoleSpanExporter = struct {
     exporter: SpanExporter,
     pretty_print: bool,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, pretty_print: bool) !*ConsoleSpanExporter {
         const self = try allocator.create(ConsoleSpanExporter);
         self.* = .{
             .exporter = .{
                 .vtable = &.{
-                    .export = export,
+                    .exportSpans = exportSpans,
                     .shutdown = shutdown,
                 },
             },
@@ -406,12 +406,12 @@ pub const ConsoleSpanExporter = struct {
         };
         return self;
     }
-    
-    fn export(exporter: *SpanExporter, spans: []const *Span) !void {
+
+    fn exportSpans(exporter: *SpanExporter, spans: []const *Span) !void {
         const self = @fieldParentPtr(ConsoleSpanExporter, "exporter", exporter);
-        
+
         const out = std.io.getStdOut().writer();
-        
+
         for (spans) |span| {
             if (self.pretty_print) {
                 try out.print("=== Span: {s} ===\n", .{span.name});
@@ -425,7 +425,7 @@ pub const ConsoleSpanExporter = struct {
                 if (span.duration()) |dur| {
                     try out.print("  Duration: {d}μs\n", .{dur});
                 }
-                
+
                 if (span.attributes.count() > 0) {
                     try out.writeAll("  Attributes:\n");
                     var iter = span.attributes.iterator();
@@ -435,32 +435,32 @@ pub const ConsoleSpanExporter = struct {
                         try out.writeByte('\n');
                     }
                 }
-                
+
                 if (span.events.items.len > 0) {
                     try out.writeAll("  Events:\n");
                     for (span.events.items) |event| {
                         try out.print("    - {s} @ {d}\n", .{ event.name, event.timestamp });
                     }
                 }
-                
+
                 try out.writeByte('\n');
             } else {
                 // Compact format
                 var obj = std.json.ObjectMap.init(self.allocator);
                 defer obj.deinit();
-                
+
                 try obj.put("trace_id", .{ .string = try std.fmt.allocPrint(self.allocator, "{}", .{std.fmt.fmtSliceHexLower(&span.trace_id)}) });
                 try obj.put("span_id", .{ .string = try std.fmt.allocPrint(self.allocator, "{}", .{std.fmt.fmtSliceHexLower(&span.span_id)}) });
                 try obj.put("name", .{ .string = span.name });
                 try obj.put("kind", .{ .string = span.kind.toString() });
                 try obj.put("status", .{ .string = span.status.toString() });
-                
+
                 try std.json.stringify(std.json.Value{ .object = obj }, .{}, out);
                 try out.writeByte('\n');
             }
         }
     }
-    
+
     fn printAttributeValue(self: *ConsoleSpanExporter, writer: anytype, value: AttributeValue) !void {
         _ = self;
         switch (value) {
@@ -502,7 +502,7 @@ pub const ConsoleSpanExporter = struct {
             },
         }
     }
-    
+
     fn shutdown(exporter: *SpanExporter) void {
         const self = @fieldParentPtr(ConsoleSpanExporter, "exporter", exporter);
         self.allocator.destroy(self);
@@ -515,7 +515,7 @@ pub const Tracer = struct {
     version: []const u8,
     processor: *SpanProcessor,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         name: []const u8,
@@ -529,7 +529,7 @@ pub const Tracer = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn startSpan(
         self: *Tracer,
         name: []const u8,
@@ -538,23 +538,23 @@ pub const Tracer = struct {
     ) !*Span {
         const trace_id = if (parent_context) |ctx| ctx.trace_id else TraceContext.generateTraceId();
         const span_id = TraceContext.generateSpanId();
-        
+
         const span = try self.allocator.create(Span);
         span.* = Span.init(self.allocator, trace_id, span_id, name, kind);
-        
+
         if (parent_context) |ctx| {
             span.parent_span_id = ctx.span_id;
         }
-        
+
         // Set default attributes
         try span.setAttribute("service.name", .{ .string = self.name });
         try span.setAttribute("service.version", .{ .string = self.version });
-        
+
         self.processor.onStart(span);
-        
+
         return span;
     }
-    
+
     pub fn endSpan(self: *Tracer, span: *Span) void {
         span.end();
         self.processor.onEnd(span);
@@ -568,20 +568,20 @@ pub const TracingHook = struct {
     active_spans: std.AutoHashMap(usize, *Span),
     mutex: std.Thread.Mutex,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         id: []const u8,
         tracer: Tracer,
     ) !*TracingHook {
         const self = try allocator.create(TracingHook);
-        
+
         const vtable = try allocator.create(Hook.VTable);
         vtable.* = .{
             .execute = execute,
             .deinit = hookDeinit,
         };
-        
+
         self.* = .{
             .hook = .{
                 .id = id,
@@ -597,13 +597,13 @@ pub const TracingHook = struct {
             .mutex = .{},
             .allocator = allocator,
         };
-        
+
         return self;
     }
-    
+
     fn hookDeinit(hook: *Hook) void {
         const self = @as(*TracingHook, @ptrFromInt(@as(usize, @intCast(hook.config.?.integer))));
-        
+
         // End any remaining spans
         var iter = self.active_spans.iterator();
         while (iter.next()) |entry| {
@@ -612,31 +612,31 @@ pub const TracingHook = struct {
             self.allocator.destroy(entry.value_ptr.*);
         }
         self.active_spans.deinit();
-        
+
         self.allocator.destroy(hook.vtable);
         self.allocator.destroy(self);
     }
-    
+
     fn execute(hook: *Hook, context: *HookContext) !HookResult {
         const self = @as(*TracingHook, @ptrFromInt(@as(usize, @intCast(hook.config.?.integer))));
-        
+
         // Generate unique key for this execution
         const key = @intFromPtr(context);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         // Check if we're starting or ending a span
         if (self.active_spans.get(key)) |span| {
             // End span
             span.end();
-            
+
             // Add final attributes
             try span.setAttribute("hook.total_hooks", .{ .int = @as(i64, @intCast(context.total_hooks)) });
-            
+
             self.tracer.endSpan(span);
             _ = self.active_spans.remove(key);
-            
+
             span.deinit();
             self.allocator.destroy(span);
         } else {
@@ -647,7 +647,7 @@ pub const TracingHook = struct {
                 .{ hook.id, context.point.toString() },
             );
             defer self.allocator.free(span_name);
-            
+
             // Extract parent context if available
             var parent_context: ?TraceContext = null;
             if (context.getMetadata("trace_context")) |ctx| {
@@ -655,33 +655,33 @@ pub const TracingHook = struct {
                     parent_context = TraceContext.fromW3CHeader(ctx.string) catch null;
                 }
             }
-            
+
             const span = try self.tracer.startSpan(
                 span_name,
                 .internal,
                 if (parent_context) |*ctx| ctx else null,
             );
-            
+
             // Add span attributes
             try span.setAttribute("hook.id", .{ .string = hook.id });
             try span.setAttribute("hook.point", .{ .string = context.point.toString() });
             try span.setAttribute("hook.index", .{ .int = @as(i64, @intCast(context.hook_index)) });
-            
+
             if (context.agent) |agent| {
                 if (agent.state.metadata.get("agent_name")) |name| {
                     try span.setAttribute("agent.name", .{ .string = name.string });
                 }
             }
-            
+
             // Store span for later
             try self.active_spans.put(key, span);
-            
+
             // Add trace context to hook context for propagation
             const trace_ctx = TraceContext.init(span.trace_id, span.span_id);
             const header = try trace_ctx.toW3CHeader(context.allocator);
             try context.setMetadata("trace_context", .{ .string = header });
         }
-        
+
         return HookResult{ .continue_processing = true };
     }
 };
@@ -695,16 +695,16 @@ pub fn createTracingHook(
 ) !*Hook {
     // Create console exporter
     const exporter = try ConsoleSpanExporter.init(allocator, true);
-    
+
     // Create batch processor
     const processor = try BatchSpanProcessor.init(allocator, &exporter.exporter, 100, 5000);
-    
+
     // Create tracer
     const tracer = Tracer.init(allocator, service_name, service_version, &processor.processor);
-    
+
     // Create tracing hook
     const tracing_hook = try TracingHook.init(allocator, id, tracer);
-    
+
     return &tracing_hook.hook;
 }
 
@@ -712,15 +712,15 @@ pub fn createTracingHook(
 test "trace context" {
     const trace_id = TraceContext.generateTraceId();
     const span_id = TraceContext.generateSpanId();
-    
+
     const ctx = TraceContext.init(trace_id, span_id);
-    
+
     const allocator = std.testing.allocator;
     const header = try ctx.toW3CHeader(allocator);
     defer allocator.free(header);
-    
+
     const parsed = try TraceContext.fromW3CHeader(header);
-    
+
     try std.testing.expectEqualSlices(u8, &ctx.trace_id, &parsed.trace_id);
     try std.testing.expectEqualSlices(u8, &ctx.span_id, &parsed.span_id);
     try std.testing.expectEqual(ctx.trace_flags, parsed.trace_flags);
@@ -728,24 +728,24 @@ test "trace context" {
 
 test "span lifecycle" {
     const allocator = std.testing.allocator;
-    
+
     const trace_id = TraceContext.generateTraceId();
     const span_id = TraceContext.generateSpanId();
-    
+
     var span = Span.init(allocator, trace_id, span_id, "test_span", .internal);
     defer span.deinit();
-    
+
     try span.setAttribute("test.attribute", .{ .string = "test_value" });
     try span.setAttribute("test.number", .{ .int = 42 });
-    
+
     var event = SpanEvent.init(allocator, "test_event");
     defer event.deinit();
     try event.attributes.put("event.detail", .{ .string = "something happened" });
     try span.addEvent(event);
-    
+
     span.setStatus(.ok, "completed successfully");
     span.end();
-    
+
     try std.testing.expect(span.end_time != null);
     try std.testing.expect(span.duration() != null);
     try std.testing.expectEqual(@as(usize, 2), span.attributes.count());
@@ -754,45 +754,45 @@ test "span lifecycle" {
 
 test "tracer" {
     const allocator = std.testing.allocator;
-    
+
     // Create a no-op exporter for testing
     const NoOpExporter = struct {
         exporter: SpanExporter,
-        
-        fn export(exp: *SpanExporter, spans: []const *Span) !void {
+
+        fn exportSpans(exp: *SpanExporter, spans: []const *Span) !void {
             _ = exp;
             _ = spans;
         }
-        
+
         fn shutdown(exp: *SpanExporter) void {
             _ = exp;
         }
     };
-    
+
     var noop = NoOpExporter{
         .exporter = .{
             .vtable = &.{
-                .export = NoOpExporter.export,
+                .exportSpans = NoOpExporter.exportSpans,
                 .shutdown = NoOpExporter.shutdown,
             },
         },
     };
-    
+
     const processor = try BatchSpanProcessor.init(allocator, &noop.exporter, 10, 1000);
     defer processor.processor.shutdown();
-    
+
     var tracer = Tracer.init(allocator, "test_service", "1.0.0", &processor.processor);
-    
+
     const span = try tracer.startSpan("test_operation", .internal, null);
     defer {
         span.deinit();
         allocator.destroy(span);
     }
-    
+
     try span.setAttribute("test.key", .{ .string = "test_value" });
-    
+
     tracer.endSpan(span);
-    
+
     try std.testing.expectEqualStrings("test_operation", span.name);
     try std.testing.expect(span.end_time != null);
 }

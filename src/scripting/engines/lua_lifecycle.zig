@@ -141,9 +141,9 @@ pub const ManagedLuaState = struct {
     mutex: std.Thread.Mutex,
 
     pub const IsolationLevel = enum {
-        none,       // No isolation
-        basic,      // Basic environment restrictions
-        strict,     // Full sandboxing
+        none, // No isolation
+        basic, // Basic environment restrictions
+        strict, // Full sandboxing
     };
 
     pub fn init(allocator: std.mem.Allocator, config: EngineConfig) !*Self {
@@ -190,7 +190,7 @@ pub const ManagedLuaState = struct {
         defer self.mutex.unlock();
 
         self.stage = .cleanup;
-        
+
         // Clean up snapshots
         for (self.snapshots.items) |*snapshot| {
             snapshot.deinit();
@@ -230,7 +230,7 @@ pub const ManagedLuaState = struct {
 
         // Configure garbage collection
         self.configureGC();
-        
+
         self.stage = .active;
     }
 
@@ -239,8 +239,8 @@ pub const ManagedLuaState = struct {
 
         // Remove dangerous functions
         const dangerous_globals = [_][]const u8{
-            "dofile", "loadfile", "require", "io", "os", "debug",
-            "package", "getfenv", "setfenv", "load", "loadstring",
+            "dofile",  "loadfile", "require", "io",   "os",         "debug",
+            "package", "getfenv",  "setfenv", "load", "loadstring",
         };
 
         for (dangerous_globals) |global| {
@@ -261,7 +261,7 @@ pub const ManagedLuaState = struct {
         // Add only safe functions
         const safe_globals = [_][]const u8{
             "print", "tostring", "tonumber", "type", "next", "pairs", "ipairs",
-            "math", "string", "table",
+            "math",  "string",   "table",
         };
 
         for (safe_globals) |global| {
@@ -318,10 +318,10 @@ pub const ManagedLuaState = struct {
 
         // Get clean global table
         self.wrapper.createTable(0, 0);
-        
+
         // Restore standard libraries
         lua.c.luaL_openlibs(self.state);
-        
+
         // Reapply sandbox restrictions
         switch (self.isolation_level) {
             .none => {},
@@ -381,7 +381,7 @@ pub const ManagedLuaState = struct {
     pub fn suspendState(self: *Self) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         if (self.stage == .active) {
             self.stage = .suspended;
         }
@@ -390,7 +390,7 @@ pub const ManagedLuaState = struct {
     pub fn resumeState(self: *Self) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         if (self.stage == .suspended) {
             self.stage = .active;
         }
@@ -405,33 +405,33 @@ pub const ManagedLuaState = struct {
     pub fn getMemoryUsage(self: *Self) usize {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         if (!lua.lua_enabled) return 0;
-        
+
         // If using custom allocator, get precise stats
         if (self.wrapper.getAllocationStats()) |stats| {
             return stats.total_allocated;
         }
-        
+
         // Fallback to Lua GC stats
         const count_kb = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNT, @as(c_int, 0));
         const count_b = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNTB, @as(c_int, 0));
         return @as(usize, @intCast(count_kb)) * 1024 + @as(usize, @intCast(count_b));
     }
-    
+
     pub fn getAllocationStats(self: *Self) ?@import("lua_allocator.zig").AllocationStats {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         return self.wrapper.getAllocationStats();
     }
 
     pub fn collectGarbage(self: *Self) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         if (!lua.lua_enabled) return;
-        
+
         _ = lua.c.lua_gc(self.state, lua.c.LUA_GCCOLLECT, 0);
         self.stats.gc_collections += 1;
     }
@@ -439,10 +439,10 @@ pub const ManagedLuaState = struct {
     pub fn isHealthy(self: *Self) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
-        return self.stage == .active and 
-               self.stats.error_count < 100 and // Arbitrary threshold
-               self.getMemoryUsage() < (self.config.max_memory_bytes * 2); // 200% of limit
+
+        return self.stage == .active and
+            self.stats.error_count < 100 and // Arbitrary threshold
+            self.getMemoryUsage() < (self.config.max_memory_bytes * 2); // 200% of limit
     }
 };
 
@@ -499,7 +499,7 @@ pub const LuaStatePool = struct {
         // Try to reuse available state
         while (self.available_states.items.len > 0) {
             const state = self.available_states.pop();
-            
+
             // Check if state is still healthy
             if (state.isHealthy()) {
                 try state.reset();
@@ -526,7 +526,7 @@ pub const LuaStatePool = struct {
         defer self.mutex.unlock();
 
         _ = self.in_use_states.remove(state);
-        
+
         // Check if we should keep this state in the pool
         if (state.isHealthy() and self.available_states.items.len < self.max_pool_size) {
             state.suspendState();
@@ -548,7 +548,7 @@ pub const LuaStatePool = struct {
         while (i < self.available_states.items.len) {
             const state = self.available_states.items[i];
             const stats = state.getStats();
-            
+
             if (stats.getIdleTime() > self.max_idle_time) {
                 _ = self.available_states.swapRemove(i);
                 state.deinit();
@@ -583,21 +583,21 @@ pub const LuaStatePool = struct {
 // Tests
 test "ManagedLuaState lifecycle" {
     if (!lua.lua_enabled) return;
-    
+
     const allocator = std.testing.allocator;
     const config = EngineConfig{};
-    
+
     const state = try ManagedLuaState.init(allocator, config);
     defer state.deinit();
-    
+
     try std.testing.expect(state.stage == .active);
-    
+
     // Test execution
     try state.execute("x = 42");
-    
+
     const stats = state.getStats();
     try std.testing.expect(stats.execution_count == 1);
-    
+
     // Test reset
     try state.reset();
     try std.testing.expect(state.stage == .active);
@@ -605,27 +605,27 @@ test "ManagedLuaState lifecycle" {
 
 test "LuaStatePool operations" {
     if (!lua.lua_enabled) return;
-    
+
     const allocator = std.testing.allocator;
     const config = EngineConfig{};
-    
+
     const pool = try LuaStatePool.init(allocator, config, 2);
     defer pool.deinit();
-    
+
     // Acquire state
     const state1 = try pool.acquire();
     const state2 = try pool.acquire();
-    
+
     // Pool should be at capacity
     try std.testing.expectError(LifecycleError.PoolExhausted, pool.acquire());
-    
+
     // Release and reacquire
     pool.release(state1);
     const state3 = try pool.acquire();
-    
+
     pool.release(state2);
     pool.release(state3);
-    
+
     const stats = pool.getStats();
     try std.testing.expect(stats.available_count <= 2);
 }

@@ -14,25 +14,25 @@ pub const ScriptValue = union(enum) {
     object: Object,
     function: *ScriptFunction,
     userdata: UserData,
-    
+
     pub const Array = struct {
         items: []ScriptValue,
         allocator: std.mem.Allocator,
-        
+
         pub fn init(allocator: std.mem.Allocator, capacity: usize) !Array {
             return Array{
                 .items = try allocator.alloc(ScriptValue, capacity),
                 .allocator = allocator,
             };
         }
-        
+
         pub fn deinit(self: *Array) void {
             for (self.items) |*item| {
                 item.deinit(self.allocator);
             }
             self.allocator.free(self.items);
         }
-        
+
         pub fn clone(self: Array, allocator: std.mem.Allocator) !Array {
             var new_array = try Array.init(allocator, self.items.len);
             for (self.items, 0..) |item, i| {
@@ -41,18 +41,18 @@ pub const ScriptValue = union(enum) {
             return new_array;
         }
     };
-    
+
     pub const Object = struct {
         map: std.StringHashMap(ScriptValue),
         allocator: std.mem.Allocator,
-        
+
         pub fn init(allocator: std.mem.Allocator) Object {
             return Object{
                 .map = std.StringHashMap(ScriptValue).init(allocator),
                 .allocator = allocator,
             };
         }
-        
+
         pub fn deinit(self: *Object) void {
             var iter = self.map.iterator();
             while (iter.next()) |entry| {
@@ -61,16 +61,16 @@ pub const ScriptValue = union(enum) {
             }
             self.map.deinit();
         }
-        
+
         pub fn put(self: *Object, key: []const u8, value: ScriptValue) !void {
             const owned_key = try self.allocator.dupe(u8, key);
             try self.map.put(owned_key, value);
         }
-        
+
         pub fn get(self: *const Object, key: []const u8) ?ScriptValue {
             return self.map.get(key);
         }
-        
+
         pub fn clone(self: Object, allocator: std.mem.Allocator) !Object {
             var new_obj = Object.init(allocator);
             var iter = self.map.iterator();
@@ -81,23 +81,23 @@ pub const ScriptValue = union(enum) {
             return new_obj;
         }
     };
-    
+
     pub const UserData = struct {
         ptr: *anyopaque,
         type_id: []const u8,
         deinit_fn: ?*const fn (ptr: *anyopaque) void = null,
-        
+
         pub fn deinit(self: *UserData) void {
             if (self.deinit_fn) |deinit_fn| {
                 deinit_fn(self.ptr);
             }
         }
     };
-    
+
     /// Convert from a Zig value to ScriptValue
     pub fn fromZig(comptime T: type, value: T, allocator: std.mem.Allocator) !ScriptValue {
         const type_info = @typeInfo(T);
-        
+
         return switch (type_info) {
             .Void, .Null => ScriptValue.nil,
             .Bool => ScriptValue{ .boolean = value },
@@ -168,11 +168,11 @@ pub const ScriptValue = union(enum) {
             else => return error.UnsupportedType,
         };
     }
-    
+
     /// Convert from ScriptValue to a Zig value
     pub fn toZig(self: ScriptValue, comptime T: type, allocator: std.mem.Allocator) !T {
         const type_info = @typeInfo(T);
-        
+
         switch (type_info) {
             .Void => {
                 if (self != .nil) return error.TypeMismatch;
@@ -265,7 +265,7 @@ pub const ScriptValue = union(enum) {
             else => return error.UnsupportedType,
         }
     }
-    
+
     /// Deep clone a ScriptValue
     pub fn clone(self: ScriptValue, allocator: std.mem.Allocator) !ScriptValue {
         return switch (self) {
@@ -280,7 +280,7 @@ pub const ScriptValue = union(enum) {
             .userdata => |ud| ScriptValue{ .userdata = ud }, // Userdata is not cloned
         };
     }
-    
+
     /// Release resources associated with a ScriptValue
     pub fn deinit(self: *ScriptValue, allocator: std.mem.Allocator) void {
         switch (self.*) {
@@ -292,11 +292,11 @@ pub const ScriptValue = union(enum) {
             .userdata => |*ud| ud.deinit(),
         }
     }
-    
+
     /// Check if two ScriptValues are equal
     pub fn eql(self: ScriptValue, other: ScriptValue) bool {
         if (@intFromEnum(self) != @intFromEnum(other)) return false;
-        
+
         return switch (self) {
             .nil => true,
             .boolean => |b| b == other.boolean,
@@ -315,7 +315,7 @@ pub const ScriptValue = union(enum) {
             .userdata => |ud| ud.ptr == other.userdata.ptr,
         };
     }
-    
+
     /// Get string representation for debugging
     pub fn toString(self: ScriptValue, allocator: std.mem.Allocator) ![]u8 {
         return switch (self) {
@@ -350,60 +350,60 @@ const ScriptFunction = @import("interface.zig").ScriptFunction;
 test "ScriptValue from/to Zig conversions" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     // Test basic types
     {
         const val = try ScriptValue.fromZig(bool, true, allocator);
         defer val.deinit(allocator);
         try testing.expect(val.boolean == true);
-        
+
         const back = try val.toZig(bool, allocator);
         try testing.expect(back == true);
     }
-    
+
     {
         const val = try ScriptValue.fromZig(i32, 42, allocator);
         defer val.deinit(allocator);
         try testing.expect(val.integer == 42);
-        
+
         const back = try val.toZig(i32, allocator);
         try testing.expect(back == 42);
     }
-    
+
     {
         const val = try ScriptValue.fromZig(f64, 3.14, allocator);
         defer val.deinit(allocator);
         try testing.expect(val.number == 3.14);
-        
+
         const back = try val.toZig(f64, allocator);
         try testing.expect(back == 3.14);
     }
-    
+
     // Test string
     {
         const str = "hello world";
         const val = try ScriptValue.fromZig([]const u8, str, allocator);
         defer val.deinit(allocator);
         try testing.expectEqualStrings(val.string, str);
-        
+
         const back = try val.toZig([]const u8, allocator);
         defer allocator.free(back);
         try testing.expectEqualStrings(back, str);
     }
-    
+
     // Test optional
     {
         const opt: ?i32 = 42;
         const val = try ScriptValue.fromZig(?i32, opt, allocator);
         defer val.deinit(allocator);
         try testing.expect(val.integer == 42);
-        
+
         const none: ?i32 = null;
         const nil_val = try ScriptValue.fromZig(?i32, none, allocator);
         defer nil_val.deinit(allocator);
         try testing.expect(nil_val == .nil);
     }
-    
+
     // Test struct
     {
         const TestStruct = struct {
@@ -411,16 +411,16 @@ test "ScriptValue from/to Zig conversions" {
             value: i32,
             enabled: bool,
         };
-        
+
         const test_struct = TestStruct{
             .name = "test",
             .value = 42,
             .enabled = true,
         };
-        
+
         const val = try ScriptValue.fromZig(TestStruct, test_struct, allocator);
         defer val.deinit(allocator);
-        
+
         try testing.expect(val == .object);
         try testing.expectEqualStrings(val.object.get("name").?.string, "test");
         try testing.expect(val.object.get("value").?.integer == 42);
@@ -431,31 +431,31 @@ test "ScriptValue from/to Zig conversions" {
 test "ScriptValue array operations" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var array = try ScriptValue.Array.init(allocator, 3);
     defer array.deinit();
-    
+
     array.items[0] = ScriptValue{ .integer = 1 };
     array.items[1] = ScriptValue{ .string = try allocator.dupe(u8, "hello") };
     array.items[2] = ScriptValue{ .boolean = true };
-    
+
     const val = ScriptValue{ .array = array };
     _ = val;
-    
+
     // Note: array is moved into val, so we shouldn't deinit it separately
 }
 
 test "ScriptValue object operations" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     var obj = ScriptValue.Object.init(allocator);
     defer obj.deinit();
-    
+
     try obj.put("name", ScriptValue{ .string = try allocator.dupe(u8, "test") });
     try obj.put("value", ScriptValue{ .integer = 42 });
     try obj.put("enabled", ScriptValue{ .boolean = true });
-    
+
     try testing.expectEqualStrings(obj.get("name").?.string, "test");
     try testing.expect(obj.get("value").?.integer == 42);
     try testing.expect(obj.get("enabled").?.boolean == true);
@@ -464,7 +464,7 @@ test "ScriptValue object operations" {
 
 test "ScriptValue equality" {
     const testing = std.testing;
-    
+
     try testing.expect(ScriptValue.nil.eql(ScriptValue.nil));
     try testing.expect((ScriptValue{ .boolean = true }).eql(ScriptValue{ .boolean = true }));
     try testing.expect(!(ScriptValue{ .boolean = true }).eql(ScriptValue{ .boolean = false }));

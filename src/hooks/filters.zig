@@ -11,16 +11,16 @@ const HookPoint = types.HookPoint;
 // Base filter interface
 pub const HookFilter = struct {
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
         shouldExecute: *const fn (filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool,
         deinit: ?*const fn (filter: *HookFilter) void = null,
     };
-    
+
     pub fn shouldExecute(self: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         return self.vtable.shouldExecute(self, hook, context);
     }
-    
+
     pub fn deinit(self: *HookFilter) void {
         if (self.vtable.deinit) |deinit_fn| {
             deinit_fn(self);
@@ -34,10 +34,10 @@ pub const FilteredHook = struct {
     filter: *HookFilter,
     original_hook: *Hook,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, original: *Hook, filter: *HookFilter) !*FilteredHook {
         const self = try allocator.create(FilteredHook);
-        
+
         const vtable = try allocator.create(Hook.VTable);
         vtable.* = .{
             .execute = filteredExecute,
@@ -45,7 +45,7 @@ pub const FilteredHook = struct {
             .deinit = filteredDeinit,
             .validate = if (original.vtable.validate) |_| filteredValidate else null,
         };
-        
+
         self.* = .{
             .hook = .{
                 .id = original.id,
@@ -61,39 +61,39 @@ pub const FilteredHook = struct {
             .original_hook = original,
             .allocator = allocator,
         };
-        
+
         return self;
     }
-    
+
     pub fn deinit(self: *FilteredHook) void {
         self.allocator.destroy(self.hook.vtable);
         self.allocator.destroy(self);
     }
-    
+
     fn filteredExecute(hook: *Hook, context: *HookContext) !HookResult {
         const self = @fieldParentPtr(FilteredHook, "hook", hook);
-        
+
         if (!self.filter.shouldExecute(self.filter, self.original_hook, context)) {
             return HookResult{ .continue_processing = true };
         }
-        
+
         return self.original_hook.execute(context);
     }
-    
+
     fn filteredInit(hook: *Hook, allocator: std.mem.Allocator) !void {
         const self = @fieldParentPtr(FilteredHook, "hook", hook);
         if (self.original_hook.vtable.init) |init_fn| {
             try init_fn(self.original_hook, allocator);
         }
     }
-    
+
     fn filteredDeinit(hook: *Hook) void {
         const self = @fieldParentPtr(FilteredHook, "hook", hook);
         if (self.original_hook.vtable.deinit) |deinit_fn| {
             deinit_fn(self.original_hook);
         }
     }
-    
+
     fn filteredValidate(hook: *Hook) !void {
         const self = @fieldParentPtr(FilteredHook, "hook", hook);
         if (self.original_hook.vtable.validate) |validate_fn| {
@@ -109,7 +109,7 @@ pub const PointFilter = struct {
     filter: HookFilter,
     points: []const HookPoint,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, points: []const HookPoint) !*PointFilter {
         const self = try allocator.create(PointFilter);
         self.* = .{
@@ -124,11 +124,11 @@ pub const PointFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         _ = hook;
         const self = @fieldParentPtr(PointFilter, "filter", filter);
-        
+
         for (self.points) |point| {
             if (point == context.point) {
                 return true;
@@ -136,7 +136,7 @@ pub const PointFilter = struct {
         }
         return false;
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(PointFilter, "filter", filter);
         self.allocator.free(self.points);
@@ -148,7 +148,7 @@ pub const PointFilter = struct {
 pub const PredicateFilter = struct {
     filter: HookFilter,
     predicate: *const fn (hook: *const Hook, context: *const HookContext) bool,
-    
+
     pub fn init(allocator: std.mem.Allocator, predicate: *const fn (hook: *const Hook, context: *const HookContext) bool) !*PredicateFilter {
         const self = try allocator.create(PredicateFilter);
         self.* = .{
@@ -162,12 +162,12 @@ pub const PredicateFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         const self = @fieldParentPtr(PredicateFilter, "filter", filter);
         return self.predicate(hook, context);
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(PredicateFilter, "filter", filter);
         self.allocator.destroy(self);
@@ -182,7 +182,7 @@ pub const RateLimitFilter = struct {
     executions: std.ArrayList(i64),
     mutex: std.Thread.Mutex,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, max_executions: u32, window_ms: u64) !*RateLimitFilter {
         const self = try allocator.create(RateLimitFilter);
         self.* = .{
@@ -200,18 +200,18 @@ pub const RateLimitFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         _ = hook;
         _ = context;
         const self = @fieldParentPtr(RateLimitFilter, "filter", filter);
-        
+
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const now = std.time.milliTimestamp();
         const window_start = now - @as(i64, @intCast(self.window_ms));
-        
+
         // Remove old executions outside the window
         var i: usize = 0;
         while (i < self.executions.items.len) {
@@ -221,17 +221,17 @@ pub const RateLimitFilter = struct {
                 i += 1;
             }
         }
-        
+
         // Check if we've exceeded the limit
         if (self.executions.items.len >= self.max_executions) {
             return false;
         }
-        
+
         // Record this execution
         self.executions.append(now) catch return false;
         return true;
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(RateLimitFilter, "filter", filter);
         self.executions.deinit();
@@ -246,16 +246,16 @@ pub const MetadataFilter = struct {
     value: ?std.json.Value,
     match_type: MatchType,
     allocator: std.mem.Allocator,
-    
+
     pub const MatchType = enum {
-        exists,      // Key exists
-        not_exists,  // Key doesn't exist
-        equals,      // Value equals
-        not_equals,  // Value not equals
-        contains,    // String contains
-        matches,     // Regex match
+        exists, // Key exists
+        not_exists, // Key doesn't exist
+        equals, // Value equals
+        not_equals, // Value not equals
+        contains, // String contains
+        matches, // Regex match
     };
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         key: []const u8,
@@ -277,13 +277,13 @@ pub const MetadataFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         _ = hook;
         const self = @fieldParentPtr(MetadataFilter, "filter", filter);
-        
+
         const metadata_value = context.getMetadata(self.key);
-        
+
         switch (self.match_type) {
             .exists => return metadata_value != null,
             .not_exists => return metadata_value == null,
@@ -306,7 +306,7 @@ pub const MetadataFilter = struct {
             },
         }
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(MetadataFilter, "filter", filter);
         self.allocator.free(self.key);
@@ -320,13 +320,13 @@ pub const CompositeFilter = struct {
     filters: []*HookFilter,
     operator: LogicalOperator,
     allocator: std.mem.Allocator,
-    
+
     pub const LogicalOperator = enum {
-        @"and",  // All filters must pass
-        @"or",   // Any filter must pass
-        not,     // Invert result (only uses first filter)
+        @"and", // All filters must pass
+        @"or", // Any filter must pass
+        not, // Invert result (only uses first filter)
     };
-    
+
     pub fn init(allocator: std.mem.Allocator, filters: []*HookFilter, operator: LogicalOperator) !*CompositeFilter {
         const self = try allocator.create(CompositeFilter);
         self.* = .{
@@ -342,10 +342,10 @@ pub const CompositeFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         const self = @fieldParentPtr(CompositeFilter, "filter", filter);
-        
+
         switch (self.operator) {
             .@"and" => {
                 for (self.filters) |sub_filter| {
@@ -369,7 +369,7 @@ pub const CompositeFilter = struct {
             },
         }
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(CompositeFilter, "filter", filter);
         for (self.filters) |sub_filter| {
@@ -388,7 +388,7 @@ pub const TimeWindowFilter = struct {
     days_of_week: u8, // Bitmask: Sunday = 1, Monday = 2, etc.
     timezone_offset_minutes: i16,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(
         allocator: std.mem.Allocator,
         start_hour: u8,
@@ -412,28 +412,28 @@ pub const TimeWindowFilter = struct {
         };
         return self;
     }
-    
+
     fn shouldExecute(filter: *const HookFilter, hook: *const Hook, context: *const HookContext) bool {
         _ = hook;
         _ = context;
         const self = @fieldParentPtr(TimeWindowFilter, "filter", filter);
-        
+
         // Get current time adjusted for timezone
         const now = std.time.timestamp();
         const adjusted_now = now + (@as(i64, self.timezone_offset_minutes) * 60);
-        
+
         // Calculate day of week and hour
         const days_since_epoch = @divTrunc(adjusted_now, 86400);
         const day_of_week = @as(u8, @intCast(@mod(days_since_epoch + 4, 7))); // Thursday = 0 at epoch
         const seconds_today = @mod(adjusted_now, 86400);
         const current_hour = @as(u8, @intCast(@divTrunc(seconds_today, 3600)));
-        
+
         // Check day of week
         const day_mask = @as(u8, 1) << @intCast(day_of_week);
         if ((self.days_of_week & day_mask) == 0) {
             return false;
         }
-        
+
         // Check hour range
         if (self.start_hour <= self.end_hour) {
             return current_hour >= self.start_hour and current_hour < self.end_hour;
@@ -442,7 +442,7 @@ pub const TimeWindowFilter = struct {
             return current_hour >= self.start_hour or current_hour < self.end_hour;
         }
     }
-    
+
     fn deinit(filter: *HookFilter) void {
         const self = @fieldParentPtr(TimeWindowFilter, "filter", filter);
         self.allocator.destroy(self);
@@ -453,60 +453,60 @@ pub const TimeWindowFilter = struct {
 pub const FilterBuilder = struct {
     allocator: std.mem.Allocator,
     filters: std.ArrayList(*HookFilter),
-    
+
     pub fn init(allocator: std.mem.Allocator) FilterBuilder {
         return .{
             .allocator = allocator,
             .filters = std.ArrayList(*HookFilter).init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *FilterBuilder) void {
         for (self.filters.items) |filter| {
             filter.deinit();
         }
         self.filters.deinit();
     }
-    
+
     pub fn atPoints(self: *FilterBuilder, points: []const HookPoint) !*FilterBuilder {
         const filter = try PointFilter.init(self.allocator, points);
         try self.filters.append(&filter.filter);
         return self;
     }
-    
+
     pub fn withPredicate(self: *FilterBuilder, predicate: *const fn (hook: *const Hook, context: *const HookContext) bool) !*FilterBuilder {
         const filter = try PredicateFilter.init(self.allocator, predicate);
         try self.filters.append(&filter.filter);
         return self;
     }
-    
+
     pub fn withRateLimit(self: *FilterBuilder, max_executions: u32, window_ms: u64) !*FilterBuilder {
         const filter = try RateLimitFilter.init(self.allocator, max_executions, window_ms);
         try self.filters.append(&filter.filter);
         return self;
     }
-    
+
     pub fn withMetadata(self: *FilterBuilder, key: []const u8, value: ?std.json.Value, match_type: MetadataFilter.MatchType) !*FilterBuilder {
         const filter = try MetadataFilter.init(self.allocator, key, value, match_type);
         try self.filters.append(&filter.filter);
         return self;
     }
-    
+
     pub fn duringTimeWindow(self: *FilterBuilder, start_hour: u8, end_hour: u8, days_of_week: u8, timezone_offset_minutes: i16) !*FilterBuilder {
         const filter = try TimeWindowFilter.init(self.allocator, start_hour, end_hour, days_of_week, timezone_offset_minutes);
         try self.filters.append(&filter.filter);
         return self;
     }
-    
+
     pub fn build(self: *FilterBuilder, operator: CompositeFilter.LogicalOperator) !*HookFilter {
         if (self.filters.items.len == 0) {
             return error.NoFiltersAdded;
         }
-        
+
         if (self.filters.items.len == 1) {
             return self.filters.items[0];
         }
-        
+
         const composite = try CompositeFilter.init(self.allocator, self.filters.items, operator);
         return &composite.filter;
     }
@@ -515,10 +515,10 @@ pub const FilterBuilder = struct {
 // Tests
 test "point filter" {
     const allocator = std.testing.allocator;
-    
+
     const filter = try PointFilter.init(allocator, &[_]HookPoint{ .agent_before_run, .agent_after_run });
     defer filter.filter.deinit();
-    
+
     var hook = Hook{
         .id = "test",
         .name = "Test",
@@ -526,25 +526,25 @@ test "point filter" {
         .vtable = undefined,
         .supported_points = &[_]HookPoint{.agent_before_run},
     };
-    
+
     var run_context = try @import("../context.zig").RunContext.init(allocator, .{});
     defer run_context.deinit();
-    
+
     var context = HookContext.init(allocator, .agent_before_run, &run_context);
     defer context.deinit();
-    
+
     try std.testing.expect(filter.filter.shouldExecute(&filter.filter, &hook, &context));
-    
+
     context.point = .agent_cleanup;
     try std.testing.expect(!filter.filter.shouldExecute(&filter.filter, &hook, &context));
 }
 
 test "rate limit filter" {
     const allocator = std.testing.allocator;
-    
+
     const filter = try RateLimitFilter.init(allocator, 2, 1000); // 2 executions per second
     defer filter.filter.deinit();
-    
+
     var hook = Hook{
         .id = "test",
         .name = "Test",
@@ -552,32 +552,32 @@ test "rate limit filter" {
         .vtable = undefined,
         .supported_points = &[_]HookPoint{.agent_before_run},
     };
-    
+
     var run_context = try @import("../context.zig").RunContext.init(allocator, .{});
     defer run_context.deinit();
-    
+
     var context = HookContext.init(allocator, .agent_before_run, &run_context);
     defer context.deinit();
-    
+
     // First two should succeed
     try std.testing.expect(filter.filter.shouldExecute(&filter.filter, &hook, &context));
     try std.testing.expect(filter.filter.shouldExecute(&filter.filter, &hook, &context));
-    
+
     // Third should fail
     try std.testing.expect(!filter.filter.shouldExecute(&filter.filter, &hook, &context));
 }
 
 test "filter builder" {
     const allocator = std.testing.allocator;
-    
+
     var builder = FilterBuilder.init(allocator);
     defer builder.deinit();
-    
+
     const filter = try builder
         .atPoints(&[_]HookPoint{.agent_before_run})
         .withRateLimit(10, 60000)
         .build(.@"and");
     defer filter.deinit();
-    
+
     try std.testing.expect(filter == .filter);
 }

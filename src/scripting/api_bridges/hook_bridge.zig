@@ -23,7 +23,7 @@ const ScriptHook = struct {
     context: *ScriptContext,
     enabled: bool = true,
     metadata: ?ScriptValue.Object = null,
-    
+
     pub fn deinit(self: *ScriptHook) void {
         const allocator = self.context.allocator;
         allocator.free(self.id);
@@ -47,10 +47,10 @@ pub const HookBridge = struct {
         .init = init,
         .deinit = deinit,
     };
-    
+
     fn getModule(allocator: std.mem.Allocator) anyerror!*ScriptModule {
         const module = try allocator.create(ScriptModule);
-        
+
         module.* = ScriptModule{
             .name = "hook",
             .functions = &hook_functions,
@@ -58,25 +58,25 @@ pub const HookBridge = struct {
             .description = "Hook system for lifecycle event interception",
             .version = "1.0.0",
         };
-        
+
         return module;
     }
-    
+
     fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
         _ = engine;
-        
+
         registry_mutex.lock();
         defer registry_mutex.unlock();
-        
+
         if (hook_registry == null) {
             hook_registry = std.StringHashMap(*ScriptHook).init(context.allocator);
         }
     }
-    
+
     fn deinit() void {
         registry_mutex.lock();
         defer registry_mutex.unlock();
-        
+
         if (hook_registry) |*registry| {
             var iter = registry.iterator();
             while (iter.next()) |entry| {
@@ -285,33 +285,33 @@ fn registerHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[0] != .string or args[1] != .function or args[2] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const hook_type_str = args[0].string;
     const callback = args[1].function;
     const options = args[2].object;
     const context = @fieldParentPtr(ScriptContext, "allocator", options.allocator);
     const allocator = context.allocator;
-    
+
     // Parse hook type
     const hook_type = try parseHookType(hook_type_str);
-    
+
     // Extract options
     const priority = if (options.get("priority")) |p|
         try parsePriority(try p.toZig(i64, allocator))
     else
         .normal;
-        
+
     const metadata = if (options.get("metadata")) |m|
         try m.object.clone()
     else
         null;
-    
+
     // Generate unique ID
     registry_mutex.lock();
     const hook_id = try std.fmt.allocPrint(allocator, "hook_{}", .{next_hook_id});
     next_hook_id += 1;
     registry_mutex.unlock();
-    
+
     // Create hook wrapper
     const script_hook = try allocator.create(ScriptHook);
     script_hook.* = ScriptHook{
@@ -323,17 +323,17 @@ fn registerHook(args: []const ScriptValue) anyerror!ScriptValue {
         .enabled = true,
         .metadata = metadata,
     };
-    
+
     // Register hook
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         try registry.put(hook_id, script_hook);
     }
-    
+
     // In real implementation, would register with the hook system
-    
+
     return ScriptValue{ .string = hook_id };
 }
 
@@ -341,19 +341,19 @@ fn unregisterHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.fetchRemove(hook_id)) |kv| {
             kv.value.deinit();
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -361,19 +361,19 @@ fn enableHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             script_hook.enabled = true;
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -381,32 +381,32 @@ fn disableHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             script_hook.enabled = false;
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
 fn listHooks(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         const allocator = registry.allocator;
         var list = try ScriptValue.Array.init(allocator, registry.count());
-        
+
         var iter = registry.iterator();
         var i: usize = 0;
         while (iter.next()) |entry| : (i += 1) {
@@ -417,10 +417,10 @@ fn listHooks(args: []const ScriptValue) anyerror!ScriptValue {
             try hook_info.put("enabled", ScriptValue{ .boolean = entry.value_ptr.*.enabled });
             list.items[i] = ScriptValue{ .object = hook_info };
         }
-        
+
         return ScriptValue{ .array = list };
     }
-    
+
     return ScriptValue{ .array = ScriptValue.Array{ .items = &[_]ScriptValue{}, .allocator = undefined } };
 }
 
@@ -428,17 +428,17 @@ fn listHooksByType(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_type_str = args[0].string;
     const hook_type = try parseHookType(hook_type_str);
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         const allocator = registry.allocator;
         var filtered = std.ArrayList(ScriptValue).init(allocator);
-        
+
         var iter = registry.iterator();
         while (iter.next()) |entry| {
             if (entry.value_ptr.*.hook_type == hook_type) {
@@ -449,10 +449,10 @@ fn listHooksByType(args: []const ScriptValue) anyerror!ScriptValue {
                 try filtered.append(ScriptValue{ .object = hook_info });
             }
         }
-        
+
         return ScriptValue{ .array = .{ .items = try filtered.toOwnedSlice(), .allocator = allocator } };
     }
-    
+
     return ScriptValue{ .array = ScriptValue.Array{ .items = &[_]ScriptValue{}, .allocator = undefined } };
 }
 
@@ -460,32 +460,32 @@ fn getHookInfo(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             const allocator = script_hook.context.allocator;
             var info = ScriptValue.Object.init(allocator);
-            
+
             try info.put("id", ScriptValue{ .string = try allocator.dupe(u8, hook_id) });
             try info.put("type", ScriptValue{ .string = try allocator.dupe(u8, @tagName(script_hook.hook_type)) });
             try info.put("priority", ScriptValue{ .string = try allocator.dupe(u8, @tagName(script_hook.priority)) });
             try info.put("enabled", ScriptValue{ .boolean = script_hook.enabled });
-            
+
             if (script_hook.metadata) |meta| {
                 try info.put("metadata", ScriptValue{ .object = try meta.clone() });
             } else {
                 try info.put("metadata", ScriptValue.nil);
             }
-            
+
             return ScriptValue{ .object = info };
         }
     }
-    
+
     return ScriptValue.nil;
 }
 
@@ -493,20 +493,20 @@ fn setHookPriority(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .integer) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
     const priority_value = args[1].integer;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             script_hook.priority = try parsePriority(priority_value);
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -514,26 +514,26 @@ fn setHookMetadata(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
     const metadata = args[1].object;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             // Free old metadata
             if (script_hook.metadata) |*old_meta| {
                 old_meta.deinit();
             }
-            
+
             // Set new metadata
             script_hook.metadata = try metadata.clone();
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -541,12 +541,12 @@ fn getHookMetadata(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         if (registry.get(hook_id)) |script_hook| {
             if (script_hook.metadata) |meta| {
@@ -554,7 +554,7 @@ fn getHookMetadata(args: []const ScriptValue) anyerror!ScriptValue {
             }
         }
     }
-    
+
     return ScriptValue.nil;
 }
 
@@ -562,65 +562,65 @@ fn triggerHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_type_str = args[0].string;
     const hook_data = args[1];
     const hook_type = try parseHookType(hook_type_str);
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         // Find and execute all hooks of this type
         var hooks_executed: u32 = 0;
-        
+
         // Collect hooks into array for sorting by priority
         var hooks = std.ArrayList(*ScriptHook).init(registry.allocator);
         defer hooks.deinit();
-        
+
         var iter = registry.iterator();
         while (iter.next()) |entry| {
             if (entry.value_ptr.*.hook_type == hook_type and entry.value_ptr.*.enabled) {
                 try hooks.append(entry.value_ptr.*);
             }
         }
-        
+
         // Sort by priority (high to low)
         std.sort.sort(*ScriptHook, hooks.items, {}, struct {
             fn lessThan(_: void, a: *ScriptHook, b: *ScriptHook) bool {
                 return @intFromEnum(a.priority) > @intFromEnum(b.priority);
             }
         }.lessThan);
-        
+
         // Execute hooks
         var modified_data = try hook_data.clone(registry.allocator);
         defer modified_data.deinit(registry.allocator);
-        
+
         for (hooks.items) |script_hook| {
             const callback_args = [_]ScriptValue{
                 ScriptValue{ .string = hook_type_str },
                 modified_data,
             };
-            
+
             const result = try script_hook.callback.call(&callback_args);
-            
+
             // If hook returns data, use it for next hook
             if (result != .nil) {
                 modified_data.deinit(registry.allocator);
                 modified_data = result;
             }
-            
+
             hooks_executed += 1;
         }
-        
+
         // Return final modified data
         var result = ScriptValue.Object.init(registry.allocator);
         try result.put("hooks_executed", ScriptValue{ .integer = @intCast(hooks_executed) });
         try result.put("data", modified_data);
-        
+
         return ScriptValue{ .object = result };
     }
-    
+
     return ScriptValue{ .object = ScriptValue.Object.init(undefined) };
 }
 
@@ -628,15 +628,15 @@ fn createHookChain(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .array) {
         return error.InvalidArguments;
     }
-    
+
     const hook_ids = args[0].array;
     const allocator = hook_ids.allocator;
-    
+
     // Create a new hook that executes the chain
     var chain_info = ScriptValue.Object.init(allocator);
     try chain_info.put("type", ScriptValue{ .string = try allocator.dupe(u8, "chain") });
     try chain_info.put("hooks", args[0]);
-    
+
     return ScriptValue{ .object = chain_info };
 }
 
@@ -644,7 +644,7 @@ fn composeHooks(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .array) {
         return error.InvalidArguments;
     }
-    
+
     // Similar to chain but combines results
     return createHookChain(args);
 }
@@ -653,15 +653,15 @@ fn interceptHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[0] != .string or args[1] != .string or args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     const original_hook_id = args[0].string;
     const interceptor_type = args[1].string;
     const interceptor_fn = args[2].function;
-    
+
     _ = original_hook_id;
     _ = interceptor_type;
     _ = interceptor_fn;
-    
+
     // TODO: Implement hook interception
     return ScriptValue{ .boolean = true };
 }
@@ -671,10 +671,10 @@ fn getHookStats(args: []const ScriptValue) anyerror!ScriptValue {
         args[0].string
     else
         null;
-        
+
     const allocator = std.heap.page_allocator; // Temporary allocator
     var stats = ScriptValue.Object.init(allocator);
-    
+
     if (hook_id) |id| {
         // Stats for specific hook
         try stats.put("hook_id", ScriptValue{ .string = try allocator.dupe(u8, id) });
@@ -689,7 +689,7 @@ fn getHookStats(args: []const ScriptValue) anyerror!ScriptValue {
         try stats.put("total_executions", ScriptValue{ .integer = 1337 });
         try stats.put("total_errors", ScriptValue{ .integer = 2 });
     }
-    
+
     return ScriptValue{ .object = stats };
 }
 
@@ -697,72 +697,72 @@ fn clearHooksByType(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const hook_type_str = args[0].string;
     const hook_type = try parseHookType(hook_type_str);
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         var to_remove = std.ArrayList([]const u8).init(registry.allocator);
         defer to_remove.deinit();
-        
+
         var iter = registry.iterator();
         while (iter.next()) |entry| {
             if (entry.value_ptr.*.hook_type == hook_type) {
                 try to_remove.append(entry.key_ptr.*);
             }
         }
-        
+
         for (to_remove.items) |key| {
             if (registry.fetchRemove(key)) |kv| {
                 kv.value.deinit();
             }
         }
-        
+
         return ScriptValue{ .integer = @intCast(to_remove.items.len) };
     }
-    
+
     return ScriptValue{ .integer = 0 };
 }
 
 fn clearAllHooks(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (hook_registry) |*registry| {
         const count = registry.count();
-        
+
         var iter = registry.iterator();
         while (iter.next()) |entry| {
             entry.value_ptr.*.deinit();
         }
         registry.clearRetainingCapacity();
-        
+
         return ScriptValue{ .integer = @intCast(count) };
     }
-    
+
     return ScriptValue{ .integer = 0 };
 }
 
 fn getHookTypes(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     const allocator = std.heap.page_allocator; // Temporary allocator
-    
+
     const hook_types = std.meta.fields(hook.HookType);
     var list = try ScriptValue.Array.init(allocator, hook_types.len);
-    
+
     for (hook_types, 0..) |field, i| {
         var type_info = ScriptValue.Object.init(allocator);
         try type_info.put("name", ScriptValue{ .string = try allocator.dupe(u8, field.name) });
         try type_info.put("description", ScriptValue{ .string = try allocator.dupe(u8, getHookTypeDescription(field.name)) });
         list.items[i] = ScriptValue{ .object = type_info };
     }
-    
+
     return ScriptValue{ .array = list };
 }
 
@@ -792,7 +792,7 @@ fn parseHookType(type_str: []const u8) !hook.HookType {
     } else if (std.mem.eql(u8, type_str, "shutdown")) {
         return .shutdown;
     }
-    
+
     return error.InvalidHookType;
 }
 
@@ -832,7 +832,7 @@ fn getHookTypeDescription(type_name: []const u8) []const u8 {
     } else if (std.mem.eql(u8, type_name, "shutdown")) {
         return "Executed during shutdown";
     }
-    
+
     return "Unknown hook type";
 }
 
@@ -840,10 +840,10 @@ fn getHookTypeDescription(type_name: []const u8) []const u8 {
 test "HookBridge module creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     const module = try HookBridge.getModule(allocator);
     defer allocator.destroy(module);
-    
+
     try testing.expectEqualStrings("hook", module.name);
     try testing.expect(module.functions.len > 0);
     try testing.expect(module.constants.len > 0);

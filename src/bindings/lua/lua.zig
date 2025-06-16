@@ -115,7 +115,7 @@ pub const LuaWrapper = struct {
         if (!lua_enabled) {
             return error.LuaNotEnabled;
         }
-        
+
         const self = try allocator.create(LuaWrapper);
         errdefer allocator.destroy(self);
 
@@ -134,14 +134,14 @@ pub const LuaWrapper = struct {
 
         return self;
     }
-    
+
     pub fn initWithCustomAllocator(allocator: std.mem.Allocator, memory_limit: usize, debug_mode: bool) !*LuaWrapper {
         if (!lua_enabled) {
             return error.LuaNotEnabled;
         }
-        
+
         const lua_allocator = @import("../../scripting/engines/lua_allocator.zig");
-        
+
         const self = try allocator.create(LuaWrapper);
         errdefer allocator.destroy(self);
 
@@ -165,7 +165,7 @@ pub const LuaWrapper = struct {
         if (!lua_enabled) {
             return error.LuaNotEnabled;
         }
-        
+
         const self = try allocator.create(LuaWrapper);
         self.* = LuaWrapper{
             .state = state,
@@ -190,7 +190,7 @@ pub const LuaWrapper = struct {
     // Execute Lua code
     pub fn doString(self: *LuaWrapper, code: []const u8) !void {
         if (!lua_enabled) return error.LuaNotEnabled;
-        
+
         const code_z = try self.allocator.dupeZ(u8, code);
         defer self.allocator.free(code_z);
 
@@ -206,7 +206,7 @@ pub const LuaWrapper = struct {
     // Load Lua file
     pub fn doFile(self: *LuaWrapper, filename: []const u8) !void {
         if (!lua_enabled) return error.LuaNotEnabled;
-        
+
         const filename_z = try self.allocator.dupeZ(u8, filename);
         defer self.allocator.free(filename_z);
 
@@ -406,11 +406,11 @@ pub const LuaWrapper = struct {
         if (!lua_enabled) return;
         c.luaL_unref(self.state, table, reference);
     }
-    
+
     // Get memory allocation statistics (only available with custom allocator)
     pub fn getAllocationStats(self: *LuaWrapper) ?@import("../../scripting/engines/lua_allocator.zig").AllocationStats {
         if (!lua_enabled or !self.uses_custom_allocator) return null;
-        
+
         const lua_allocator = @import("../../scripting/engines/lua_allocator.zig");
         if (lua_allocator.getAllocatorContext(self.state)) |context| {
             return context.getStats();
@@ -422,7 +422,7 @@ pub const LuaWrapper = struct {
 // Test support
 test "lua wrapper basic operations" {
     if (!lua_enabled) return;
-    
+
     const allocator = std.testing.allocator;
     const lua = try LuaWrapper.init(allocator);
     defer lua.deinit();

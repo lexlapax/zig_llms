@@ -22,7 +22,7 @@ const ScriptEventHandler = struct {
     context: *ScriptContext,
     priority: event.EventPriority,
     filter: ?ScriptValue,
-    
+
     pub fn deinit(self: *ScriptEventHandler) void {
         const allocator = self.context.allocator;
         allocator.free(self.id);
@@ -46,10 +46,10 @@ pub const EventBridge = struct {
         .init = init,
         .deinit = deinit,
     };
-    
+
     fn getModule(allocator: std.mem.Allocator) anyerror!*ScriptModule {
         const module = try allocator.create(ScriptModule);
-        
+
         module.* = ScriptModule{
             .name = "event",
             .functions = &event_functions,
@@ -57,25 +57,25 @@ pub const EventBridge = struct {
             .description = "Event system subscription and emission API",
             .version = "1.0.0",
         };
-        
+
         return module;
     }
-    
+
     fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
         _ = engine;
-        
+
         handlers_mutex.lock();
         defer handlers_mutex.unlock();
-        
+
         if (event_handlers == null) {
             event_handlers = std.StringHashMap(*ScriptEventHandler).init(context.allocator);
         }
     }
-    
+
     fn deinit() void {
         handlers_mutex.lock();
         defer handlers_mutex.unlock();
-        
+
         if (event_handlers) |*handlers| {
             var iter = handlers.iterator();
             while (iter.next()) |entry| {
@@ -266,21 +266,21 @@ fn subscribeToEvent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .function) {
         return error.InvalidArguments;
     }
-    
+
     const event_type_str = args[0].string;
     const callback = args[1].function;
     const context = @fieldParentPtr(ScriptContext, "allocator", args[0].string);
     const allocator = context.allocator;
-    
+
     // Parse event type
     const event_type = try parseEventType(event_type_str);
-    
+
     // Generate unique handler ID
     handlers_mutex.lock();
     const handler_id = try std.fmt.allocPrint(allocator, "handler_{}", .{next_handler_id});
     next_handler_id += 1;
     handlers_mutex.unlock();
-    
+
     // Create handler wrapper
     const handler = try allocator.create(ScriptEventHandler);
     handler.* = ScriptEventHandler{
@@ -291,17 +291,17 @@ fn subscribeToEvent(args: []const ScriptValue) anyerror!ScriptValue {
         .priority = .normal,
         .filter = null,
     };
-    
+
     // Register handler
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         try handlers.put(handler_id, handler);
     }
-    
+
     // In real implementation, would register with event system
-    
+
     return ScriptValue{ .string = handler_id };
 }
 
@@ -309,22 +309,22 @@ fn subscribeToEventWithFilter(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[0] != .string or args[1] != .function) {
         return error.InvalidArguments;
     }
-    
+
     const event_type_str = args[0].string;
     const callback = args[1].function;
     const filter = args[2];
     const context = @fieldParentPtr(ScriptContext, "allocator", args[0].string);
     const allocator = context.allocator;
-    
+
     // Parse event type
     const event_type = try parseEventType(event_type_str);
-    
+
     // Generate unique handler ID
     handlers_mutex.lock();
     const handler_id = try std.fmt.allocPrint(allocator, "handler_{}", .{next_handler_id});
     next_handler_id += 1;
     handlers_mutex.unlock();
-    
+
     // Create handler wrapper with filter
     const handler = try allocator.create(ScriptEventHandler);
     handler.* = ScriptEventHandler{
@@ -335,15 +335,15 @@ fn subscribeToEventWithFilter(args: []const ScriptValue) anyerror!ScriptValue {
         .priority = .normal,
         .filter = try filter.clone(allocator),
     };
-    
+
     // Register handler
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         try handlers.put(handler_id, handler);
     }
-    
+
     return ScriptValue{ .string = handler_id };
 }
 
@@ -351,19 +351,19 @@ fn unsubscribeFromEvent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const handler_id = args[0].string;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         if (handlers.fetchRemove(handler_id)) |kv| {
             kv.value.deinit();
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -371,22 +371,22 @@ fn emitEvent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const event_type_str = args[0].string;
     const event_data = args[1];
     const allocator = @fieldParentPtr(ScriptContext, "allocator", event_type_str).allocator;
-    
+
     // Parse event type
     const event_type = try parseEventType(event_type_str);
-    
+
     // Convert data to JSON for event system
     const data_json = try TypeMarshaler.marshalJsonValue(event_data, allocator);
     defer data_json.deinit();
-    
+
     // Emit event (simplified - in real implementation would use event system)
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         var iter = handlers.iterator();
         while (iter.next()) |entry| {
@@ -398,7 +398,7 @@ fn emitEvent(args: []const ScriptValue) anyerror!ScriptValue {
                         continue;
                     }
                 }
-                
+
                 // Call handler callback
                 const callback_args = [_]ScriptValue{
                     ScriptValue{ .string = event_type_str },
@@ -408,7 +408,7 @@ fn emitEvent(args: []const ScriptValue) anyerror!ScriptValue {
             }
         }
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -416,7 +416,7 @@ fn emitEventAsync(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     // Execute synchronously and call callback
     const result = emitEvent(args[0..2]) catch |err| {
         const callback_args = [_]ScriptValue{
@@ -426,26 +426,26 @@ fn emitEventAsync(args: []const ScriptValue) anyerror!ScriptValue {
         _ = try args[2].function.call(&callback_args);
         return ScriptValue.nil;
     };
-    
+
     const callback_args = [_]ScriptValue{
         result,
         ScriptValue.nil,
     };
     _ = try args[2].function.call(&callback_args);
-    
+
     return ScriptValue.nil;
 }
 
 fn listEventSubscriptions(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         const allocator = handlers.allocator;
         var list = try ScriptValue.Array.init(allocator, handlers.count());
-        
+
         var iter = handlers.iterator();
         var i: usize = 0;
         while (iter.next()) |entry| : (i += 1) {
@@ -456,10 +456,10 @@ fn listEventSubscriptions(args: []const ScriptValue) anyerror!ScriptValue {
             try sub_obj.put("has_filter", ScriptValue{ .boolean = entry.value_ptr.*.filter != null });
             list.items[i] = ScriptValue{ .object = sub_obj };
         }
-        
+
         return ScriptValue{ .array = list };
     }
-    
+
     return ScriptValue{ .array = ScriptValue.Array{ .items = &[_]ScriptValue{}, .allocator = undefined } };
 }
 
@@ -467,13 +467,13 @@ fn getEventHistory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .integer) {
         return error.InvalidArguments;
     }
-    
+
     const limit = @as(usize, @intCast(args[0].integer));
     const allocator = std.heap.page_allocator; // Temporary allocator
-    
+
     // Simulate event history
     var history = try ScriptValue.Array.init(allocator, @min(limit, 5));
-    
+
     const mock_events = [_]struct {
         type: []const u8,
         timestamp: i64,
@@ -485,7 +485,7 @@ fn getEventHistory(args: []const ScriptValue) anyerror!ScriptValue {
         .{ .type = "agent_completed", .timestamp = 1700000003, .source = "agent_1" },
         .{ .type = "workflow_started", .timestamp = 1700000004, .source = "workflow_1" },
     };
-    
+
     for (mock_events[0..@min(limit, mock_events.len)], 0..) |evt, i| {
         var event_obj = ScriptValue.Object.init(allocator);
         try event_obj.put("type", ScriptValue{ .string = try allocator.dupe(u8, evt.type) });
@@ -493,13 +493,13 @@ fn getEventHistory(args: []const ScriptValue) anyerror!ScriptValue {
         try event_obj.put("source", ScriptValue{ .string = try allocator.dupe(u8, evt.source) });
         history.items[i] = ScriptValue{ .object = event_obj };
     }
-    
+
     return ScriptValue{ .array = history };
 }
 
 fn clearEventHistory(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     // In real implementation, would clear event history
     return ScriptValue{ .boolean = true };
 }
@@ -508,19 +508,19 @@ fn pauseEventHandler(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const handler_id = args[0].string;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         if (handlers.get(handler_id)) |_| {
             // In real implementation, would pause the handler
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -528,19 +528,19 @@ fn resumeEventHandler(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const handler_id = args[0].string;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         if (handlers.get(handler_id)) |_| {
             // In real implementation, would resume the handler
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -548,28 +548,28 @@ fn getHandlerStats(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const handler_id = args[0].string;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         if (handlers.get(handler_id)) |handler| {
             const allocator = handler.context.allocator;
             var stats = ScriptValue.Object.init(allocator);
-            
+
             try stats.put("id", ScriptValue{ .string = try allocator.dupe(u8, handler_id) });
             try stats.put("event_type", ScriptValue{ .string = try allocator.dupe(u8, @tagName(handler.event_type)) });
             try stats.put("calls_count", ScriptValue{ .integer = 42 }); // Mock data
             try stats.put("errors_count", ScriptValue{ .integer = 0 });
             try stats.put("avg_duration_ms", ScriptValue{ .number = 15.5 });
             try stats.put("last_called", ScriptValue{ .integer = 1700000000 });
-            
+
             return ScriptValue{ .object = stats };
         }
     }
-    
+
     return ScriptValue.nil;
 }
 
@@ -577,13 +577,13 @@ fn setEventPriority(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .integer) {
         return error.InvalidArguments;
     }
-    
+
     const handler_id = args[0].string;
     const priority = args[1].integer;
-    
+
     handlers_mutex.lock();
     defer handlers_mutex.unlock();
-    
+
     if (event_handlers) |*handlers| {
         if (handlers.get(handler_id)) |handler| {
             handler.priority = switch (priority) {
@@ -594,7 +594,7 @@ fn setEventPriority(args: []const ScriptValue) anyerror!ScriptValue {
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -602,30 +602,30 @@ fn enableEventLogging(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     // In real implementation, would enable logging for event type
     return ScriptValue{ .boolean = true };
 }
 
 fn disableEventLogging(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     // In real implementation, would disable all event logging
     return ScriptValue{ .boolean = true };
 }
 
 fn getEventTypes(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     const allocator = std.heap.page_allocator; // Temporary allocator
-    
+
     const event_types = std.meta.fields(event.EventType);
     var list = try ScriptValue.Array.init(allocator, event_types.len);
-    
+
     for (event_types, 0..) |field, i| {
         list.items[i] = ScriptValue{ .string = try allocator.dupe(u8, field.name) };
     }
-    
+
     return ScriptValue{ .array = list };
 }
 
@@ -657,18 +657,18 @@ fn parseEventType(type_str: []const u8) !event.EventType {
     } else if (std.mem.eql(u8, type_str, "provider_response")) {
         return .provider_response;
     }
-    
+
     return error.InvalidEventType;
 }
 
 fn matchesFilter(event_data: ScriptValue, filter: ScriptValue, allocator: std.mem.Allocator) !bool {
     _ = allocator;
-    
+
     // Simple filter matching logic
     switch (filter) {
         .object => |filter_obj| {
             if (event_data != .object) return false;
-            
+
             var iter = filter_obj.map.iterator();
             while (iter.next()) |entry| {
                 if (event_data.object.get(entry.key_ptr.*)) |data_value| {
@@ -689,7 +689,7 @@ fn valuesMatch(a: ScriptValue, b: ScriptValue) !bool {
     if (@as(std.meta.Tag(ScriptValue), a) != @as(std.meta.Tag(ScriptValue), b)) {
         return false;
     }
-    
+
     switch (a) {
         .nil => return true,
         .boolean => |val| return val == b.boolean,
@@ -704,10 +704,10 @@ fn valuesMatch(a: ScriptValue, b: ScriptValue) !bool {
 test "EventBridge module creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     const module = try EventBridge.getModule(allocator);
     defer allocator.destroy(module);
-    
+
     try testing.expectEqualStrings("event", module.name);
     try testing.expect(module.functions.len > 0);
     try testing.expect(module.constants.len > 0);

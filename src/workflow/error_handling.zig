@@ -33,7 +33,7 @@ pub const ErrorDetails = struct {
     retry_count: u8 = 0,
     is_retriable: bool = true,
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, err: anyerror, message: []const u8) ErrorDetails {
         return .{
             .error_type = @errorName(err),
@@ -42,33 +42,33 @@ pub const ErrorDetails = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *ErrorDetails) void {
         _ = self;
     }
-    
+
     pub fn toJson(self: *const ErrorDetails) !std.json.Value {
         var obj = std.json.ObjectMap.init(self.allocator);
         errdefer obj.deinit();
-        
+
         try obj.put("error_type", .{ .string = self.error_type });
         try obj.put("message", .{ .string = self.message });
         try obj.put("timestamp", .{ .integer = self.timestamp });
         try obj.put("retry_count", .{ .integer = self.retry_count });
         try obj.put("is_retriable", .{ .bool = self.is_retriable });
-        
+
         if (self.step_id) |id| {
             try obj.put("step_id", .{ .string = id });
         }
-        
+
         if (self.context) |ctx| {
             try obj.put("context", ctx);
         }
-        
+
         if (self.stack_trace) |trace| {
             try obj.put("stack_trace", .{ .string = trace });
         }
-        
+
         return .{ .object = obj };
     }
 };
@@ -81,29 +81,29 @@ pub const ErrorHandlingStrategy = struct {
     compensation_handler: ?CompensationHandler = null,
     error_filters: std.ArrayList(ErrorFilter),
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator) ErrorHandlingStrategy {
         return .{
             .error_filters = std.ArrayList(ErrorFilter).init(allocator),
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *ErrorHandlingStrategy) void {
         for (self.error_filters.items) |*filter| {
             filter.deinit();
         }
         self.error_filters.deinit();
-        
+
         if (self.circuit_breaker) |*cb| {
             cb.deinit();
         }
     }
-    
+
     pub fn addErrorFilter(self: *ErrorHandlingStrategy, filter: ErrorFilter) !void {
         try self.error_filters.append(filter);
     }
-    
+
     pub fn shouldRetry(self: *const ErrorHandlingStrategy, error_details: *const ErrorDetails) bool {
         // Check error filters
         for (self.error_filters.items) |*filter| {
@@ -111,12 +111,12 @@ pub const ErrorHandlingStrategy = struct {
                 return false;
             }
         }
-        
+
         // Check retry policy
         if (self.retry_policy) |policy| {
             return policy.shouldRetry(error_details);
         }
-        
+
         return error_details.is_retriable;
     }
 };
@@ -129,19 +129,19 @@ pub const RetryPolicy = struct {
     backoff_type: BackoffType = .exponential,
     jitter: bool = true,
     retriable_errors: ?[]const []const u8 = null,
-    
+
     pub const BackoffType = enum {
         fixed,
         linear,
         exponential,
         fibonacci,
     };
-    
+
     pub fn shouldRetry(self: *const RetryPolicy, error_details: *const ErrorDetails) bool {
         if (error_details.retry_count >= self.max_attempts) {
             return false;
         }
-        
+
         if (self.retriable_errors) |errors| {
             for (errors) |err| {
                 if (std.mem.eql(u8, error_details.error_type, err)) {
@@ -150,10 +150,10 @@ pub const RetryPolicy = struct {
             }
             return false;
         }
-        
+
         return error_details.is_retriable;
     }
-    
+
     pub fn getDelay(self: *const RetryPolicy, retry_count: u8) u32 {
         var delay = switch (self.backoff_type) {
             .fixed => self.initial_delay_ms,
@@ -174,16 +174,16 @@ pub const RetryPolicy = struct {
                 break :blk b;
             },
         };
-        
+
         delay = @min(delay, self.max_delay_ms);
-        
+
         if (self.jitter) {
             var rng = std.Random.DefaultPrng.init(@as(u64, @intCast(std.time.microTimestamp())));
             const jitter_amount = @as(u32, @intFromFloat(@as(f32, @floatFromInt(delay)) * 0.1));
             const jitter = rng.random().intRangeAtMost(u32, 0, jitter_amount);
             delay = delay + jitter - (jitter_amount / 2);
         }
-        
+
         return delay;
     }
 };
@@ -191,14 +191,14 @@ pub const RetryPolicy = struct {
 // Fallback strategy
 pub const FallbackStrategy = struct {
     fallback_type: FallbackType,
-    
+
     pub const FallbackType = union(enum) {
         default_value: std.json.Value,
         fallback_step: []const u8,
         fallback_workflow: []const u8,
         custom_handler: *const fn (error_details: *const ErrorDetails, context: *WorkflowExecutionContext) anyerror!std.json.Value,
     };
-    
+
     pub fn execute(self: *const FallbackStrategy, error_details: *const ErrorDetails, context: *WorkflowExecutionContext) !std.json.Value {
         return switch (self.fallback_type) {
             .default_value => |value| value,
@@ -227,20 +227,20 @@ pub const CircuitBreaker = struct {
     config: Config,
     mutex: std.Thread.Mutex = .{},
     allocator: std.mem.Allocator,
-    
+
     pub const State = enum {
         closed,
         open,
         half_open,
     };
-    
+
     pub const Config = struct {
         failure_threshold: u32 = 5,
         success_threshold: u32 = 2,
         timeout_ms: u32 = 60000,
         half_open_max_attempts: u32 = 3,
     };
-    
+
     pub fn init(allocator: std.mem.Allocator, config: Config) CircuitBreaker {
         return .{
             .config = config,
@@ -248,15 +248,15 @@ pub const CircuitBreaker = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *CircuitBreaker) void {
         _ = self;
     }
-    
+
     pub fn allowRequest(self: *CircuitBreaker) bool {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         switch (self.state) {
             .closed => return true,
             .open => {
@@ -273,11 +273,11 @@ pub const CircuitBreaker = struct {
             .half_open => return self.success_count + self.failure_count < self.config.half_open_max_attempts,
         }
     }
-    
+
     pub fn recordSuccess(self: *CircuitBreaker) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         switch (self.state) {
             .closed => {
                 self.failure_count = 0;
@@ -294,14 +294,14 @@ pub const CircuitBreaker = struct {
             .open => {},
         }
     }
-    
+
     pub fn recordFailure(self: *CircuitBreaker) void {
         self.mutex.lock();
         defer self.mutex.unlock();
-        
+
         const now = std.time.milliTimestamp();
         self.last_failure_time = now;
-        
+
         switch (self.state) {
             .closed => {
                 self.failure_count += 1;
@@ -319,7 +319,7 @@ pub const CircuitBreaker = struct {
             .open => {},
         }
     }
-    
+
     pub fn getState(self: *CircuitBreaker) State {
         self.mutex.lock();
         defer self.mutex.unlock();
@@ -331,38 +331,38 @@ pub const CircuitBreaker = struct {
 pub const CompensationHandler = struct {
     compensations: std.StringHashMap(CompensationAction),
     allocator: std.mem.Allocator,
-    
+
     pub const CompensationAction = struct {
         action_type: ActionType,
         order: i32 = 0,
-        
+
         pub const ActionType = union(enum) {
             undo_step: []const u8,
             run_workflow: []const u8,
             custom_handler: *const fn (context: *WorkflowExecutionContext) anyerror!void,
         };
     };
-    
+
     pub fn init(allocator: std.mem.Allocator) CompensationHandler {
         return .{
             .compensations = std.StringHashMap(CompensationAction).init(allocator),
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *CompensationHandler) void {
         self.compensations.deinit();
     }
-    
+
     pub fn addCompensation(self: *CompensationHandler, step_id: []const u8, action: CompensationAction) !void {
         try self.compensations.put(step_id, action);
     }
-    
+
     pub fn compensate(self: *CompensationHandler, failed_step: []const u8, context: *WorkflowExecutionContext) !void {
         // Get all compensations up to the failed step
         var compensations_to_run = std.ArrayList(struct { step_id: []const u8, action: CompensationAction }).init(self.allocator);
         defer compensations_to_run.deinit();
-        
+
         var iter = self.compensations.iterator();
         while (iter.next()) |entry| {
             try compensations_to_run.append(.{ .step_id = entry.key_ptr.*, .action = entry.value_ptr.* });
@@ -370,7 +370,7 @@ pub const CompensationHandler = struct {
                 break;
             }
         }
-        
+
         // Sort by order (reverse)
         std.sort.sort(
             @TypeOf(compensations_to_run.items[0]),
@@ -382,13 +382,13 @@ pub const CompensationHandler = struct {
                 }
             }.lessThan,
         );
-        
+
         // Execute compensations
         for (compensations_to_run.items) |item| {
             try self.executeCompensation(item.action, context);
         }
     }
-    
+
     fn executeCompensation(self: *CompensationHandler, action: CompensationAction, context: *WorkflowExecutionContext) !void {
         _ = self;
         switch (action.action_type) {
@@ -413,17 +413,17 @@ pub const CompensationHandler = struct {
 pub const ErrorFilter = struct {
     filter_type: FilterType,
     is_retriable: bool = true,
-    
+
     pub const FilterType = union(enum) {
         error_type: []const u8,
         error_pattern: []const u8,
         custom_predicate: *const fn (error_details: *const ErrorDetails) bool,
     };
-    
+
     pub fn deinit(self: *ErrorFilter) void {
         _ = self;
     }
-    
+
     pub fn matches(self: *const ErrorFilter, error_details: *const ErrorDetails) bool {
         return switch (self.filter_type) {
             .error_type => |err_type| std.mem.eql(u8, error_details.error_type, err_type),
@@ -442,7 +442,7 @@ pub const WorkflowErrorHandler = struct {
     strategy: ErrorHandlingStrategy,
     error_log: std.ArrayList(ErrorDetails),
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator) WorkflowErrorHandler {
         return .{
             .strategy = ErrorHandlingStrategy.init(allocator),
@@ -450,7 +450,7 @@ pub const WorkflowErrorHandler = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *WorkflowErrorHandler) void {
         self.strategy.deinit();
         for (self.error_log.items) |*error_detail| {
@@ -458,7 +458,7 @@ pub const WorkflowErrorHandler = struct {
         }
         self.error_log.deinit();
     }
-    
+
     pub fn handleError(
         self: *WorkflowErrorHandler,
         err: anyerror,
@@ -467,10 +467,10 @@ pub const WorkflowErrorHandler = struct {
     ) !std.json.Value {
         var error_details = ErrorDetails.init(self.allocator, err, "Workflow step execution failed");
         error_details.step_id = step_id;
-        
+
         // Log error
         try self.error_log.append(error_details);
-        
+
         // Check circuit breaker
         if (self.strategy.circuit_breaker) |*cb| {
             if (!cb.allowRequest()) {
@@ -478,22 +478,22 @@ pub const WorkflowErrorHandler = struct {
             }
             cb.recordFailure();
         }
-        
+
         // Check if should retry
         if (self.strategy.shouldRetry(&error_details)) {
             if (self.strategy.retry_policy) |policy| {
                 const delay = policy.getDelay(error_details.retry_count);
                 std.time.sleep(delay * std.time.ns_per_ms);
-                
+
                 // Update retry count for next attempt
                 if (self.error_log.items.len > 0) {
                     self.error_log.items[self.error_log.items.len - 1].retry_count += 1;
                 }
-                
+
                 return WorkflowError.StepExecutionFailed; // Signal retry
             }
         }
-        
+
         // Try fallback
         if (self.strategy.fallback_strategy) |fallback| {
             return fallback.execute(&error_details, context) catch {
@@ -506,17 +506,17 @@ pub const WorkflowErrorHandler = struct {
                 return err;
             };
         }
-        
+
         // No recovery possible
         return err;
     }
-    
+
     pub fn recordSuccess(self: *WorkflowErrorHandler) void {
         if (self.strategy.circuit_breaker) |*cb| {
             cb.recordSuccess();
         }
     }
-    
+
     pub fn getErrorLog(self: *const WorkflowErrorHandler) []const ErrorDetails {
         return self.error_log.items;
     }
@@ -530,7 +530,7 @@ test "retry policy" {
         .backoff_type = .exponential,
         .jitter = false,
     };
-    
+
     try std.testing.expectEqual(@as(u32, 100), policy.getDelay(0));
     try std.testing.expectEqual(@as(u32, 200), policy.getDelay(1));
     try std.testing.expectEqual(@as(u32, 400), policy.getDelay(2));
@@ -538,50 +538,50 @@ test "retry policy" {
 
 test "circuit breaker" {
     const allocator = std.testing.allocator;
-    
+
     var cb = CircuitBreaker.init(allocator, .{
         .failure_threshold = 3,
         .success_threshold = 2,
         .timeout_ms = 100,
     });
     defer cb.deinit();
-    
+
     try std.testing.expect(cb.allowRequest());
     try std.testing.expectEqual(CircuitBreaker.State.closed, cb.getState());
-    
+
     // Record failures to open circuit
     cb.recordFailure();
     cb.recordFailure();
     cb.recordFailure();
-    
+
     try std.testing.expectEqual(CircuitBreaker.State.open, cb.getState());
     try std.testing.expect(!cb.allowRequest());
-    
+
     // Wait for timeout
     std.time.sleep(150 * std.time.ns_per_ms);
-    
+
     // Should transition to half-open
     try std.testing.expect(cb.allowRequest());
     try std.testing.expectEqual(CircuitBreaker.State.half_open, cb.getState());
-    
+
     // Record successes to close circuit
     cb.recordSuccess();
     cb.recordSuccess();
-    
+
     try std.testing.expectEqual(CircuitBreaker.State.closed, cb.getState());
 }
 
 test "error handling strategy" {
     const allocator = std.testing.allocator;
-    
+
     var strategy = ErrorHandlingStrategy.init(allocator);
     defer strategy.deinit();
-    
+
     strategy.retry_policy = RetryPolicy{
         .max_attempts = 2,
         .retriable_errors = &[_][]const u8{"NetworkError"},
     };
-    
+
     const error_details = ErrorDetails{
         .error_type = "NetworkError",
         .message = "Connection failed",
@@ -590,6 +590,6 @@ test "error handling strategy" {
         .is_retriable = true,
         .allocator = allocator,
     };
-    
+
     try std.testing.expect(strategy.shouldRetry(&error_details));
 }

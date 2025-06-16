@@ -21,7 +21,7 @@ const ScriptAgent = struct {
     base_agent: *agent.BaseAgent,
     context: *ScriptContext,
     id: []const u8,
-    
+
     pub fn deinit(self: *ScriptAgent) void {
         self.base_agent.deinit();
         self.context.allocator.free(self.id);
@@ -42,10 +42,10 @@ pub const AgentBridge = struct {
         .init = init,
         .deinit = deinit,
     };
-    
+
     fn getModule(allocator: std.mem.Allocator) anyerror!*ScriptModule {
         const module = try allocator.create(ScriptModule);
-        
+
         module.* = ScriptModule{
             .name = "agent",
             .functions = &agent_functions,
@@ -53,26 +53,26 @@ pub const AgentBridge = struct {
             .description = "Agent management and execution API",
             .version = "1.0.0",
         };
-        
+
         return module;
     }
-    
+
     fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
         _ = engine;
-        
+
         // Initialize agent registry if needed
         registry_mutex.lock();
         defer registry_mutex.unlock();
-        
+
         if (agent_registry == null) {
             agent_registry = std.StringHashMap(*ScriptAgent).init(context.allocator);
         }
     }
-    
+
     fn deinit() void {
         registry_mutex.lock();
         defer registry_mutex.unlock();
-        
+
         if (agent_registry) |*registry| {
             var iter = registry.iterator();
             while (iter.next()) |entry| {
@@ -180,38 +180,38 @@ fn createAgent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const context = @fieldParentPtr(ScriptContext, "allocator", args[0].object.allocator);
     const allocator = context.allocator;
-    
+
     // Marshal configuration
     const config_obj = args[0].object;
-    
+
     // Extract required fields
-    const name = if (config_obj.get("name")) |n| 
-        try n.toZig([]const u8, allocator) 
-    else 
+    const name = if (config_obj.get("name")) |n|
+        try n.toZig([]const u8, allocator)
+    else
         return error.MissingField;
-        
-    const provider_name = if (config_obj.get("provider")) |p| 
-        try p.toZig([]const u8, allocator) 
-    else 
+
+    const provider_name = if (config_obj.get("provider")) |p|
+        try p.toZig([]const u8, allocator)
+    else
         return error.MissingField;
-        
-    const model_name = if (config_obj.get("model")) |m| 
-        try m.toZig([]const u8, allocator) 
-    else 
+
+    const model_name = if (config_obj.get("model")) |m|
+        try m.toZig([]const u8, allocator)
+    else
         return error.MissingField;
-    
+
     // Create agent configuration
     var agent_config = agent.AgentConfig{
         .name = name,
-        .description = if (config_obj.get("description")) |d| 
-            try d.toZig([]const u8, allocator) 
-        else 
+        .description = if (config_obj.get("description")) |d|
+            try d.toZig([]const u8, allocator)
+        else
             "",
     };
-    
+
     // Add memory configuration if specified
     if (config_obj.get("memory_config")) |mem_config| {
         if (mem_config == .object) {
@@ -219,7 +219,7 @@ fn createAgent(args: []const ScriptValue) anyerror!ScriptValue {
                 try t.toZig([]const u8, allocator)
             else
                 "short_term";
-                
+
             if (std.mem.eql(u8, mem_type, "short_term")) {
                 agent_config.memory_config = memory.MemoryConfig{
                     .max_messages = if (mem_config.object.get("max_messages")) |m|
@@ -230,22 +230,22 @@ fn createAgent(args: []const ScriptValue) anyerror!ScriptValue {
             }
         }
     }
-    
+
     // Create base agent
     const base_agent = try agent.BaseAgent.init(allocator, agent_config);
     errdefer base_agent.deinit();
-    
+
     // Configure provider
     // Note: In real implementation, this would use the actual provider registry
     _ = provider_name;
     _ = model_name;
-    
+
     // Generate unique ID
     registry_mutex.lock();
     const agent_id = try std.fmt.allocPrint(allocator, "agent_{}", .{next_agent_id});
     next_agent_id += 1;
     registry_mutex.unlock();
-    
+
     // Create script agent wrapper
     const script_agent = try allocator.create(ScriptAgent);
     script_agent.* = ScriptAgent{
@@ -253,15 +253,15 @@ fn createAgent(args: []const ScriptValue) anyerror!ScriptValue {
         .context = context,
         .id = agent_id,
     };
-    
+
     // Register agent
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (agent_registry) |*registry| {
         try registry.put(agent_id, script_agent);
     }
-    
+
     // Return agent ID
     return ScriptValue{ .string = agent_id };
 }
@@ -270,19 +270,19 @@ fn destroyAgent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (agent_registry) |*registry| {
         if (registry.fetchRemove(agent_id)) |kv| {
             kv.value.deinit();
             return ScriptValue{ .boolean = true };
         }
     }
-    
+
     return ScriptValue{ .boolean = false };
 }
 
@@ -290,29 +290,29 @@ fn runAgent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = switch (args[0]) {
         .string => |s| s,
         else => return error.InvalidArguments,
     };
-    
+
     registry_mutex.lock();
-    const script_agent = if (agent_registry) |*registry| 
-        registry.get(agent_id) 
-    else 
+    const script_agent = if (agent_registry) |*registry|
+        registry.get(agent_id)
+    else
         null;
     registry_mutex.unlock();
-    
+
     if (script_agent == null) {
         return error.AgentNotFound;
     }
-    
+
     const allocator = script_agent.?.context.allocator;
-    
+
     // Convert input to JSON for agent
     const input_json = try TypeMarshaler.marshalJsonValue(args[1], allocator);
     defer input_json.deinit();
-    
+
     // Run agent (simplified - real implementation would use actual agent execution)
     const result_json = std.json.Value{
         .object = blk: {
@@ -328,7 +328,7 @@ fn runAgent(args: []const ScriptValue) anyerror!ScriptValue {
             break :blk obj;
         },
     };
-    
+
     // Convert result back to ScriptValue
     return try TypeMarshaler.unmarshalJsonValue(result_json, allocator);
 }
@@ -337,27 +337,27 @@ fn runAgentAsync(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3) {
         return error.InvalidArguments;
     }
-    
+
     // args[0]: agent_id
     // args[1]: input
     // args[2]: callback function
-    
+
     if (args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     // In a real implementation, this would spawn an async task
     // For now, we'll just call the sync version and then the callback
     const result = try runAgent(args[0..2]);
-    
+
     // Call the callback with result and no error
     const callback_args = [_]ScriptValue{
         result,
         ScriptValue.nil, // No error
     };
-    
+
     _ = try args[2].function.call(&callback_args);
-    
+
     return ScriptValue.nil;
 }
 
@@ -365,28 +365,28 @@ fn getAgentInfo(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
-    const script_agent = if (agent_registry) |*registry| 
-        registry.get(agent_id) 
-    else 
+    const script_agent = if (agent_registry) |*registry|
+        registry.get(agent_id)
+    else
         null;
     registry_mutex.unlock();
-    
+
     if (script_agent == null) {
         return error.AgentNotFound;
     }
-    
+
     const allocator = script_agent.?.context.allocator;
     var info = ScriptValue.Object.init(allocator);
-    
+
     try info.put("id", ScriptValue{ .string = try allocator.dupe(u8, agent_id) });
     try info.put("name", ScriptValue{ .string = try allocator.dupe(u8, script_agent.?.base_agent.config.name) });
     try info.put("description", ScriptValue{ .string = try allocator.dupe(u8, script_agent.?.base_agent.config.description) });
     try info.put("status", ScriptValue{ .string = try allocator.dupe(u8, "active") });
-    
+
     return ScriptValue{ .object = info };
 }
 
@@ -394,36 +394,36 @@ fn cloneAgent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     // Get original agent
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
-    const script_agent = if (agent_registry) |*registry| 
-        registry.get(agent_id) 
-    else 
+    const script_agent = if (agent_registry) |*registry|
+        registry.get(agent_id)
+    else
         null;
     registry_mutex.unlock();
-    
+
     if (script_agent == null) {
         return error.AgentNotFound;
     }
-    
+
     // Create new configuration by merging with modifications
     const allocator = script_agent.?.context.allocator;
     var new_config = ScriptValue.Object.init(allocator);
-    
+
     // Copy base configuration
     try new_config.put("name", ScriptValue{ .string = try allocator.dupe(u8, script_agent.?.base_agent.config.name) });
     try new_config.put("description", ScriptValue{ .string = try allocator.dupe(u8, script_agent.?.base_agent.config.description) });
-    
+
     // Apply modifications from args[1]
     var iter = args[1].object.map.iterator();
     while (iter.next()) |entry| {
         const cloned_value = try entry.value_ptr.*.clone(allocator);
         try new_config.put(entry.key_ptr.*, cloned_value);
     }
-    
+
     // Create new agent with modified config
     const create_args = [_]ScriptValue{ScriptValue{ .object = new_config }};
     return try createAgent(&create_args);
@@ -433,15 +433,15 @@ fn addAgentHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[0] != .string or args[1] != .string or args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
     const hook_type = args[1].string;
     const callback = args[2].function;
-    
+
     _ = agent_id;
     _ = hook_type;
     _ = callback;
-    
+
     // TODO: Implement hook registration
     return ScriptValue{ .boolean = true };
 }
@@ -450,7 +450,7 @@ fn removeAgentHook(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     // TODO: Implement hook removal
     return ScriptValue{ .boolean = true };
 }
@@ -459,30 +459,30 @@ fn getAgentMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
-    const script_agent = if (agent_registry) |*registry| 
-        registry.get(agent_id) 
-    else 
+    const script_agent = if (agent_registry) |*registry|
+        registry.get(agent_id)
+    else
         null;
     registry_mutex.unlock();
-    
+
     if (script_agent == null) {
         return error.AgentNotFound;
     }
-    
+
     // Return memory interface object
     const allocator = script_agent.?.context.allocator;
     var memory_obj = ScriptValue.Object.init(allocator);
-    
+
     try memory_obj.put("agent_id", ScriptValue{ .string = try allocator.dupe(u8, agent_id) });
     try memory_obj.put("type", ScriptValue{ .string = try allocator.dupe(u8, "short_term") });
-    
+
     // Add memory methods as properties
     // In a real implementation, these would be bound functions
-    
+
     return ScriptValue{ .object = memory_obj };
 }
 
@@ -490,47 +490,47 @@ fn clearAgentMemory(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
-    const script_agent = if (agent_registry) |*registry| 
-        registry.get(agent_id) 
-    else 
+    const script_agent = if (agent_registry) |*registry|
+        registry.get(agent_id)
+    else
         null;
     registry_mutex.unlock();
-    
+
     if (script_agent == null) {
         return error.AgentNotFound;
     }
-    
+
     // Clear memory
     if (script_agent.?.base_agent.memory) |agent_memory| {
         agent_memory.clear();
     }
-    
+
     return ScriptValue{ .boolean = true };
 }
 
 fn listAgents(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     registry_mutex.lock();
     defer registry_mutex.unlock();
-    
+
     if (agent_registry) |*registry| {
         const allocator = registry.allocator;
         var list = try ScriptValue.Array.init(allocator, registry.count());
-        
+
         var iter = registry.iterator();
         var i: usize = 0;
         while (iter.next()) |entry| : (i += 1) {
             list.items[i] = ScriptValue{ .string = try allocator.dupe(u8, entry.key_ptr.*) };
         }
-        
+
         return ScriptValue{ .array = list };
     }
-    
+
     return ScriptValue{ .array = ScriptValue.Array{ .items = &[_]ScriptValue{}, .allocator = undefined } };
 }
 
@@ -538,16 +538,16 @@ fn getAgent(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const agent_id = args[0].string;
-    
+
     registry_mutex.lock();
-    const exists = if (agent_registry) |*registry| 
-        registry.contains(agent_id) 
-    else 
+    const exists = if (agent_registry) |*registry|
+        registry.contains(agent_id)
+    else
         false;
     registry_mutex.unlock();
-    
+
     if (exists) {
         return ScriptValue{ .string = agent_id };
     } else {
@@ -559,10 +559,10 @@ fn getAgent(args: []const ScriptValue) anyerror!ScriptValue {
 test "AgentBridge module creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     const module = try AgentBridge.getModule(allocator);
     defer allocator.destroy(module);
-    
+
     try testing.expectEqualStrings("agent", module.name);
     try testing.expect(module.functions.len > 0);
     try testing.expect(module.constants.len > 0);
@@ -571,37 +571,37 @@ test "AgentBridge module creation" {
 test "AgentBridge create and destroy" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     // Initialize a dummy context
     const dummy_engine: *anyopaque = undefined;
     const dummy_engine_context: *anyopaque = undefined;
     const context = try ScriptContext.init(allocator, "test", dummy_engine, dummy_engine_context);
     defer context.deinit();
-    
+
     // Initialize bridge
     const engine: *ScriptingEngine = undefined;
     try AgentBridge.init(engine, context);
     defer AgentBridge.deinit();
-    
+
     // Create agent configuration
     var config = ScriptValue.Object.init(allocator);
     defer config.deinit();
-    
+
     try config.put("name", ScriptValue{ .string = try allocator.dupe(u8, "test_agent") });
     try config.put("provider", ScriptValue{ .string = try allocator.dupe(u8, "openai") });
     try config.put("model", ScriptValue{ .string = try allocator.dupe(u8, "gpt-4") });
-    
+
     const create_args = [_]ScriptValue{ScriptValue{ .object = config }};
     const agent_id = try createAgent(&create_args);
     defer agent_id.deinit(allocator);
-    
+
     try testing.expect(agent_id == .string);
     try testing.expect(std.mem.startsWith(u8, agent_id.string, "agent_"));
-    
+
     // Destroy agent
     const destroy_args = [_]ScriptValue{agent_id};
     const result = try destroyAgent(&destroy_args);
-    
+
     try testing.expect(result == .boolean);
     try testing.expect(result.boolean == true);
 }

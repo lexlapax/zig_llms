@@ -17,20 +17,20 @@ pub const ProviderConfig = union(ProviderType) {
     openai: OpenAIConfig,
     anthropic: AnthropicConfig,
     ollama: OllamaConfig,
-    
+
     pub const OpenAIConfig = struct {
         api_key: []const u8,
         base_url: ?[]const u8 = null,
         model: []const u8 = "gpt-4",
         organization: ?[]const u8 = null,
     };
-    
+
     pub const AnthropicConfig = struct {
         api_key: []const u8,
         base_url: ?[]const u8 = null,
         model: []const u8 = "claude-3-opus-20240229",
     };
-    
+
     pub const OllamaConfig = struct {
         base_url: []const u8 = "http://localhost:11434",
         model: []const u8 = "llama2",
@@ -48,10 +48,10 @@ pub fn createProvider(allocator: std.mem.Allocator, config: ProviderConfig) !*Pr
 pub fn createFromJSON(allocator: std.mem.Allocator, json: []const u8) !*Provider {
     const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json, .{});
     defer parsed.deinit();
-    
+
     const obj = parsed.value.object;
     const provider_type = obj.get("type") orelse return error.MissingProviderType;
-    
+
     if (std.mem.eql(u8, provider_type.string, "openai")) {
         const config = ProviderConfig{
             .openai = .{
@@ -80,6 +80,6 @@ pub fn createFromJSON(allocator: std.mem.Allocator, json: []const u8) !*Provider
         };
         return createProvider(allocator, config);
     }
-    
+
     return error.UnknownProviderType;
 }

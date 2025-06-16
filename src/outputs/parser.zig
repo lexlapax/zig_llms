@@ -31,7 +31,7 @@ pub const ParseOptions = struct {
     allow_partial: bool = true,
     // Format hint for ambiguous content
     format_hint: ?Format = null,
-    
+
     pub const Format = enum {
         json,
         yaml,
@@ -49,7 +49,7 @@ pub const ParseResult = struct {
     warnings: []const []const u8 = &[_][]const u8{},
     recovery_applied: bool = false,
     allocator: std.mem.Allocator,
-    
+
     pub fn deinit(self: *ParseResult) void {
         // Clean up allocated memory
         if (self.errors.len > 0) {
@@ -66,7 +66,7 @@ pub const ParseResult = struct {
 
 pub const Parser = struct {
     vtable: *const VTable,
-    
+
     pub const VTable = struct {
         parse: *const fn (parser: *Parser, input: []const u8, options: ParseOptions, allocator: std.mem.Allocator) ParseError!ParseResult,
         canParse: *const fn (parser: *Parser, input: []const u8) bool,
@@ -74,23 +74,23 @@ pub const Parser = struct {
         getName: *const fn (parser: *Parser) []const u8,
         deinit: *const fn (parser: *Parser) void,
     };
-    
+
     pub fn parse(self: *Parser, input: []const u8, options: ParseOptions, allocator: std.mem.Allocator) ParseError!ParseResult {
         return self.vtable.parse(self, input, options, allocator);
     }
-    
+
     pub fn canParse(self: *Parser, input: []const u8) bool {
         return self.vtable.canParse(self, input);
     }
-    
+
     pub fn getFormat(self: *Parser) ParseOptions.Format {
         return self.vtable.getFormat(self);
     }
-    
+
     pub fn getName(self: *Parser) []const u8 {
         return self.vtable.getName(self);
     }
-    
+
     pub fn deinit(self: *Parser) void {
         self.vtable.deinit(self);
     }
@@ -105,14 +105,14 @@ pub const utils = struct {
             var buf: [256]u8 = undefined;
             start_marker = std.fmt.bufPrint(&buf, "```{s}", .{lang}) catch return null;
         }
-        
+
         const start = std.mem.indexOf(u8, input, start_marker) orelse return null;
         const content_start = std.mem.indexOf(u8, input[start..], "\n") orelse return null;
-        const end = std.mem.indexOf(u8, input[start + content_start + 1..], "```") orelse return null;
-        
-        return input[start + content_start + 1..][0..end];
+        const end = std.mem.indexOf(u8, input[start + content_start + 1 ..], "```") orelse return null;
+
+        return input[start + content_start + 1 ..][0..end];
     }
-    
+
     // Find JSON-like content in text
     pub fn findJsonContent(input: []const u8) ?[]const u8 {
         // Look for JSON object or array boundaries
@@ -120,24 +120,24 @@ pub const utils = struct {
         var start: ?usize = null;
         var in_string = false;
         var escape = false;
-        
+
         for (input, 0..) |char, i| {
             if (escape) {
                 escape = false;
                 continue;
             }
-            
+
             if (char == '\\' and in_string) {
                 escape = true;
                 continue;
             }
-            
+
             if (char == '"' and !in_string) {
                 in_string = true;
             } else if (char == '"' and in_string) {
                 in_string = false;
             }
-            
+
             if (!in_string) {
                 switch (char) {
                     '{', '[' => {
@@ -147,55 +147,57 @@ pub const utils = struct {
                     '}', ']' => {
                         depth -= 1;
                         if (depth == 0 and start != null) {
-                            return input[start.?..i + 1];
+                            return input[start.? .. i + 1];
                         }
                     },
                     else => {},
                 }
             }
         }
-        
+
         return null;
     }
-    
+
     // Detect likely format from content
     pub fn detectFormat(input: []const u8) ParseOptions.Format {
         const trimmed = std.mem.trim(u8, input, " \t\r\n");
-        
+
         // Check for markdown code blocks
         if (std.mem.indexOf(u8, trimmed, "```") != null) {
             return .markdown_codeblock;
         }
-        
+
         // Check for JSON
         if ((std.mem.startsWith(u8, trimmed, "{") and std.mem.endsWith(u8, trimmed, "}")) or
-            (std.mem.startsWith(u8, trimmed, "[") and std.mem.endsWith(u8, trimmed, "]"))) {
+            (std.mem.startsWith(u8, trimmed, "[") and std.mem.endsWith(u8, trimmed, "]")))
+        {
             return .json;
         }
-        
+
         // Check for XML
         if (std.mem.startsWith(u8, trimmed, "<") and std.mem.endsWith(u8, trimmed, ">")) {
             return .xml;
         }
-        
+
         // Check for YAML
-        if (std.mem.indexOf(u8, trimmed, ":") != null and 
-            (std.mem.indexOf(u8, trimmed, "\n") != null or trimmed.len < 100)) {
+        if (std.mem.indexOf(u8, trimmed, ":") != null and
+            (std.mem.indexOf(u8, trimmed, "\n") != null or trimmed.len < 100))
+        {
             // Simple heuristic: has colons and newlines or is short
             return .yaml;
         }
-        
+
         return .plain_text;
     }
-    
+
     // Clean common LLM response artifacts
     pub fn cleanLlmResponse(allocator: std.mem.Allocator, input: []const u8) ![]const u8 {
         var result = std.ArrayList(u8).init(allocator);
         defer result.deinit();
-        
+
         // Remove common prefixes/suffixes
         var content = input;
-        
+
         // Remove "Here is..." or similar prefixes
         const prefixes = [_][]const u8{
             "Here is the JSON:",
@@ -204,33 +206,33 @@ pub const utils = struct {
             "```json",
             "```",
         };
-        
+
         for (prefixes) |prefix| {
             if (std.mem.startsWith(u8, content, prefix)) {
                 content = content[prefix.len..];
                 break;
             }
         }
-        
+
         // Remove trailing markers
         const suffixes = [_][]const u8{
             "```",
         };
-        
+
         for (suffixes) |suffix| {
             if (std.mem.endsWith(u8, content, suffix)) {
-                content = content[0..content.len - suffix.len];
+                content = content[0 .. content.len - suffix.len];
                 break;
             }
         }
-        
+
         // Trim whitespace
         content = std.mem.trim(u8, content, " \t\r\n");
-        
+
         try result.appendSlice(content);
         return result.toOwnedSlice();
     }
-    
+
     // Extract specific fields using JSON path
     pub fn extractFields(
         allocator: std.mem.Allocator,
@@ -239,7 +241,7 @@ pub const utils = struct {
     ) !std.json.Value {
         var result = std.json.ObjectMap.init(allocator);
         errdefer result.deinit();
-        
+
         for (fields) |field_path| {
             if (getValueByPath(value, field_path)) |field_value| {
                 // Get the last segment of the path as the key
@@ -248,18 +250,18 @@ pub const utils = struct {
                 while (iter.next()) |segment| {
                     last_segment = segment;
                 }
-                
+
                 try result.put(last_segment, field_value);
             }
         }
-        
+
         return std.json.Value{ .object = result };
     }
-    
+
     fn getValueByPath(value: std.json.Value, path: []const u8) ?std.json.Value {
         var current = value;
         var iter = std.mem.tokenize(u8, path, ".");
-        
+
         while (iter.next()) |segment| {
             switch (current) {
                 .object => |obj| {
@@ -277,7 +279,7 @@ pub const utils = struct {
                 else => return null,
             }
         }
-        
+
         return current;
     }
 };
@@ -286,25 +288,25 @@ pub const utils = struct {
 pub const ParserRegistry = struct {
     allocator: std.mem.Allocator,
     parsers: std.ArrayList(*Parser),
-    
+
     pub fn init(allocator: std.mem.Allocator) ParserRegistry {
         return .{
             .allocator = allocator,
             .parsers = std.ArrayList(*Parser).init(allocator),
         };
     }
-    
+
     pub fn deinit(self: *ParserRegistry) void {
         for (self.parsers.items) |parser| {
             parser.deinit();
         }
         self.parsers.deinit();
     }
-    
+
     pub fn register(self: *ParserRegistry, parser: *Parser) !void {
         try self.parsers.append(parser);
     }
-    
+
     pub fn findParser(self: *ParserRegistry, input: []const u8, format_hint: ?ParseOptions.Format) ?*Parser {
         // If format hint provided, try to find matching parser
         if (format_hint) |format| {
@@ -314,17 +316,17 @@ pub const ParserRegistry = struct {
                 }
             }
         }
-        
+
         // Otherwise, find first parser that can handle the input
         for (self.parsers.items) |parser| {
             if (parser.canParse(input)) {
                 return parser;
             }
         }
-        
+
         return null;
     }
-    
+
     pub fn parse(
         self: *ParserRegistry,
         input: []const u8,
@@ -332,7 +334,7 @@ pub const ParserRegistry = struct {
     ) ParseError!ParseResult {
         const parser = self.findParser(input, options.format_hint) orelse
             return ParseError.InvalidFormat;
-        
+
         return parser.parse(input, options, self.allocator);
     }
 };
@@ -346,7 +348,7 @@ test "extract code block" {
         \\```
         \\Some text after
     ;
-    
+
     const content = utils.extractCodeBlock(input, "json");
     try std.testing.expect(content != null);
     try std.testing.expectEqualStrings("{\"key\": \"value\"}", content.?);
@@ -354,7 +356,7 @@ test "extract code block" {
 
 test "find JSON content" {
     const input = "Here is the response: {\"status\": \"ok\", \"count\": 42} - that's all!";
-    
+
     const json_content = utils.findJsonContent(input);
     try std.testing.expect(json_content != null);
     try std.testing.expectEqualStrings("{\"status\": \"ok\", \"count\": 42}", json_content.?);

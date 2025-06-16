@@ -24,7 +24,7 @@ const ScriptProviderConfig = struct {
     models: []const []const u8 = &[_][]const u8{},
     timeout: u32 = 30000,
     retry_config: ?RetryConfig = null,
-    
+
     const RetryConfig = struct {
         max_retries: u32 = 3,
         initial_delay_ms: u32 = 1000,
@@ -41,10 +41,10 @@ pub const ProviderBridge = struct {
         .init = init,
         .deinit = deinit,
     };
-    
+
     fn getModule(allocator: std.mem.Allocator) anyerror!*ScriptModule {
         const module = try allocator.create(ScriptModule);
-        
+
         module.* = ScriptModule{
             .name = "provider",
             .functions = &provider_functions,
@@ -52,16 +52,16 @@ pub const ProviderBridge = struct {
             .description = "LLM provider management and direct access API",
             .version = "1.0.0",
         };
-        
+
         return module;
     }
-    
+
     fn init(engine: *ScriptingEngine, context: *ScriptContext) anyerror!void {
         _ = engine;
         _ = context;
         // Provider registry is managed by the core system
     }
-    
+
     fn deinit() void {
         // Cleanup if needed
     }
@@ -214,10 +214,10 @@ const provider_constants = [_]ScriptModule.ConstantDef{
 
 fn listProviders(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     const context = @fieldParentPtr(ScriptContext, "allocator", args.ptr);
     const allocator = context.allocator;
-    
+
     // Get available providers (simplified for now)
     const providers = [_]struct {
         name: []const u8,
@@ -229,9 +229,9 @@ fn listProviders(args: []const ScriptValue) anyerror!ScriptValue {
         .{ .name = "ollama", .type = "ollama", .status = "available" },
         .{ .name = "gemini", .type = "gemini", .status = "available" },
     };
-    
+
     var list = try ScriptValue.Array.init(allocator, providers.len);
-    
+
     for (providers, 0..) |p, i| {
         var provider_obj = ScriptValue.Object.init(allocator);
         try provider_obj.put("name", ScriptValue{ .string = try allocator.dupe(u8, p.name) });
@@ -239,7 +239,7 @@ fn listProviders(args: []const ScriptValue) anyerror!ScriptValue {
         try provider_obj.put("status", ScriptValue{ .string = try allocator.dupe(u8, p.status) });
         list.items[i] = ScriptValue{ .object = provider_obj };
     }
-    
+
     return ScriptValue{ .array = list };
 }
 
@@ -247,25 +247,25 @@ fn registerProvider(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const config_obj = args[0].object;
     const allocator = config_obj.allocator;
-    
+
     // Extract provider configuration
     const name = if (config_obj.get("name")) |n|
         try n.toZig([]const u8, allocator)
     else
         return error.MissingField;
-        
+
     const provider_type = if (config_obj.get("type")) |t|
         try t.toZig([]const u8, allocator)
     else
         return error.MissingField;
-    
+
     // In real implementation, this would register with the provider registry
     _ = name;
     _ = provider_type;
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -273,10 +273,10 @@ fn unregisterProvider(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     _ = provider_name;
-    
+
     // In real implementation, this would unregister from the provider registry
     return ScriptValue{ .boolean = true };
 }
@@ -285,12 +285,12 @@ fn getProviderCapabilities(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     var capabilities = ScriptValue.Object.init(allocator);
-    
+
     // Return capabilities based on provider type
     if (std.mem.eql(u8, provider_name, "openai")) {
         try capabilities.put("streaming", ScriptValue{ .boolean = true });
@@ -298,7 +298,7 @@ fn getProviderCapabilities(args: []const ScriptValue) anyerror!ScriptValue {
         try capabilities.put("vision", ScriptValue{ .boolean = true });
         try capabilities.put("max_context_tokens", ScriptValue{ .integer = 128000 });
         try capabilities.put("max_output_tokens", ScriptValue{ .integer = 4096 });
-        
+
         var supported_models = try ScriptValue.Array.init(allocator, 4);
         supported_models.items[0] = ScriptValue{ .string = try allocator.dupe(u8, "gpt-4") };
         supported_models.items[1] = ScriptValue{ .string = try allocator.dupe(u8, "gpt-4-turbo") };
@@ -311,13 +311,13 @@ fn getProviderCapabilities(args: []const ScriptValue) anyerror!ScriptValue {
         try capabilities.put("vision", ScriptValue{ .boolean = true });
         try capabilities.put("max_context_tokens", ScriptValue{ .integer = 200000 });
         try capabilities.put("max_output_tokens", ScriptValue{ .integer = 4096 });
-        
+
         var supported_models = try ScriptValue.Array.init(allocator, 2);
         supported_models.items[0] = ScriptValue{ .string = try allocator.dupe(u8, "claude-3-opus-20240229") };
         supported_models.items[1] = ScriptValue{ .string = try allocator.dupe(u8, "claude-3-sonnet-20240229") };
         try capabilities.put("models", ScriptValue{ .array = supported_models });
     }
-    
+
     return ScriptValue{ .object = capabilities };
 }
 
@@ -325,12 +325,12 @@ fn getProviderModels(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     var models = std.ArrayList(ScriptValue).init(allocator);
-    
+
     if (std.mem.eql(u8, provider_name, "openai")) {
         const openai_models = [_]struct {
             id: []const u8,
@@ -342,7 +342,7 @@ fn getProviderModels(args: []const ScriptValue) anyerror!ScriptValue {
             .{ .id = "gpt-3.5-turbo", .name = "GPT-3.5 Turbo", .context = 16384 },
             .{ .id = "gpt-4-vision-preview", .name = "GPT-4 Vision", .context = 128000 },
         };
-        
+
         for (openai_models) |model| {
             var model_obj = ScriptValue.Object.init(allocator);
             try model_obj.put("id", ScriptValue{ .string = try allocator.dupe(u8, model.id) });
@@ -351,7 +351,7 @@ fn getProviderModels(args: []const ScriptValue) anyerror!ScriptValue {
             try models.append(ScriptValue{ .object = model_obj });
         }
     }
-    
+
     return ScriptValue{ .array = .{ .items = try models.toOwnedSlice(), .allocator = allocator } };
 }
 
@@ -359,34 +359,34 @@ fn completeWithProvider(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .object) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const request_obj = args[1].object;
     const allocator = request_obj.allocator;
-    
+
     // Extract request parameters
     const model = if (request_obj.get("model")) |m|
         try m.toZig([]const u8, allocator)
     else
         return error.MissingField;
-        
+
     const messages = request_obj.get("messages") orelse return error.MissingField;
-    
+
     // Simulate provider completion
     _ = provider_name;
     _ = model;
     _ = messages;
-    
+
     var response = ScriptValue.Object.init(allocator);
     try response.put("content", ScriptValue{ .string = try allocator.dupe(u8, "This is a simulated response from the provider.") });
     try response.put("model", ScriptValue{ .string = try allocator.dupe(u8, model) });
-    
+
     var usage = ScriptValue.Object.init(allocator);
     try usage.put("prompt_tokens", ScriptValue{ .integer = 100 });
     try usage.put("completion_tokens", ScriptValue{ .integer = 50 });
     try usage.put("total_tokens", ScriptValue{ .integer = 150 });
     try response.put("usage", ScriptValue{ .object = usage });
-    
+
     return ScriptValue{ .object = response };
 }
 
@@ -394,7 +394,7 @@ fn completeWithProviderAsync(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     // Execute synchronously and call callback
     const result = completeWithProvider(args[0..2]) catch |err| {
         const callback_args = [_]ScriptValue{
@@ -404,13 +404,13 @@ fn completeWithProviderAsync(args: []const ScriptValue) anyerror!ScriptValue {
         _ = try args[2].function.call(&callback_args);
         return ScriptValue.nil;
     };
-    
+
     const callback_args = [_]ScriptValue{
         result,
         ScriptValue.nil,
     };
     _ = try args[2].function.call(&callback_args);
-    
+
     return ScriptValue.nil;
 }
 
@@ -418,14 +418,14 @@ fn streamFromProvider(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 3 or args[0] != .string or args[1] != .object or args[2] != .function) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const request_obj = args[1].object;
     const stream_callback = args[2].function;
     const allocator = request_obj.allocator;
-    
+
     _ = provider_name;
-    
+
     // Simulate streaming response
     const chunks = [_][]const u8{
         "This ",
@@ -434,24 +434,24 @@ fn streamFromProvider(args: []const ScriptValue) anyerror!ScriptValue {
         "streaming ",
         "response.",
     };
-    
+
     for (chunks) |chunk| {
         var chunk_obj = ScriptValue.Object.init(allocator);
         try chunk_obj.put("content", ScriptValue{ .string = try allocator.dupe(u8, chunk) });
         try chunk_obj.put("done", ScriptValue{ .boolean = false });
-        
+
         const callback_args = [_]ScriptValue{ScriptValue{ .object = chunk_obj }};
         _ = try stream_callback.call(&callback_args);
     }
-    
+
     // Send final chunk
     var final_obj = ScriptValue.Object.init(allocator);
     try final_obj.put("content", ScriptValue{ .string = try allocator.dupe(u8, "") });
     try final_obj.put("done", ScriptValue{ .boolean = true });
-    
+
     const final_args = [_]ScriptValue{ScriptValue{ .object = final_obj }};
     _ = try stream_callback.call(&final_args);
-    
+
     return ScriptValue{ .boolean = true };
 }
 
@@ -459,14 +459,14 @@ fn validateApiKey(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 2 or args[0] != .string or args[1] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const api_key = args[1].string;
-    
+
     // Simple validation (in real implementation, would make test API call)
     _ = provider_name;
     const is_valid = api_key.len > 10;
-    
+
     return ScriptValue{ .boolean = is_valid };
 }
 
@@ -474,17 +474,17 @@ fn getProviderUsage(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     var usage = ScriptValue.Object.init(allocator);
     try usage.put("requests_today", ScriptValue{ .integer = 150 });
     try usage.put("tokens_today", ScriptValue{ .integer = 50000 });
     try usage.put("requests_this_month", ScriptValue{ .integer = 3500 });
     try usage.put("tokens_this_month", ScriptValue{ .integer = 1500000 });
     try usage.put("cost_this_month", ScriptValue{ .number = 45.67 });
-    
+
     return ScriptValue{ .object = usage };
 }
 
@@ -492,12 +492,12 @@ fn getProviderRateLimits(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     var limits = ScriptValue.Object.init(allocator);
-    
+
     if (std.mem.eql(u8, provider_name, "openai")) {
         try limits.put("requests_per_minute", ScriptValue{ .integer = 500 });
         try limits.put("tokens_per_minute", ScriptValue{ .integer = 90000 });
@@ -507,7 +507,7 @@ fn getProviderRateLimits(args: []const ScriptValue) anyerror!ScriptValue {
         try limits.put("tokens_per_minute", ScriptValue{ .integer = 100000 });
         try limits.put("requests_per_day", ScriptValue{ .integer = 1000 });
     }
-    
+
     return ScriptValue{ .object = limits };
 }
 
@@ -515,17 +515,17 @@ fn setDefaultProvider(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     _ = provider_name;
-    
+
     // In real implementation, this would set the default provider
     return ScriptValue{ .boolean = true };
 }
 
 fn getDefaultProvider(args: []const ScriptValue) anyerror!ScriptValue {
     _ = args;
-    
+
     const allocator = std.heap.page_allocator; // Temporary allocator
     return ScriptValue{ .string = try allocator.dupe(u8, "openai") };
 }
@@ -534,16 +534,16 @@ fn testProviderConnection(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     // Simulate connection test
     var result = ScriptValue.Object.init(allocator);
     try result.put("connected", ScriptValue{ .boolean = true });
     try result.put("latency_ms", ScriptValue{ .integer = 150 });
     try result.put("status", ScriptValue{ .string = try allocator.dupe(u8, "healthy") });
-    
+
     return ScriptValue{ .object = result };
 }
 
@@ -551,25 +551,25 @@ fn getProviderMetadata(args: []const ScriptValue) anyerror!ScriptValue {
     if (args.len != 1 or args[0] != .string) {
         return error.InvalidArguments;
     }
-    
+
     const provider_name = args[0].string;
     const allocator = @fieldParentPtr(ScriptContext, "allocator", provider_name).allocator;
-    
+
     var metadata = ScriptValue.Object.init(allocator);
-    
+
     if (std.mem.eql(u8, provider_name, "openai")) {
         try metadata.put("name", ScriptValue{ .string = try allocator.dupe(u8, "OpenAI") });
         try metadata.put("website", ScriptValue{ .string = try allocator.dupe(u8, "https://openai.com") });
         try metadata.put("documentation", ScriptValue{ .string = try allocator.dupe(u8, "https://platform.openai.com/docs") });
         try metadata.put("pricing_url", ScriptValue{ .string = try allocator.dupe(u8, "https://openai.com/pricing") });
-        
+
         var features = try ScriptValue.Array.init(allocator, 3);
         features.items[0] = ScriptValue{ .string = try allocator.dupe(u8, "chat_completions") };
         features.items[1] = ScriptValue{ .string = try allocator.dupe(u8, "function_calling") };
         features.items[2] = ScriptValue{ .string = try allocator.dupe(u8, "vision") };
         try metadata.put("features", ScriptValue{ .array = features });
     }
-    
+
     return ScriptValue{ .object = metadata };
 }
 
@@ -577,10 +577,10 @@ fn getProviderMetadata(args: []const ScriptValue) anyerror!ScriptValue {
 test "ProviderBridge module creation" {
     const testing = std.testing;
     const allocator = testing.allocator;
-    
+
     const module = try ProviderBridge.getModule(allocator);
     defer allocator.destroy(module);
-    
+
     try testing.expectEqualStrings("provider", module.name);
     try testing.expect(module.functions.len > 0);
     try testing.expect(module.constants.len > 0);

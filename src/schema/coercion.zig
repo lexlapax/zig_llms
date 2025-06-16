@@ -7,7 +7,7 @@ const validator = @import("validator.zig");
 pub const CoercionOptions = struct {
     // String to number conversion
     string_to_number: bool = true,
-    // Number to string conversion  
+    // Number to string conversion
     number_to_string: bool = true,
     // String to boolean conversion ("true"/"false", "1"/"0", "yes"/"no")
     string_to_boolean: bool = true,
@@ -19,7 +19,7 @@ pub const CoercionOptions = struct {
     trim_strings: bool = true,
     // Convert string case
     string_case: ?StringCase = null,
-    
+
     pub const StringCase = enum {
         lower,
         upper,
@@ -31,7 +31,7 @@ pub const CoercionResult = struct {
     value: std.json.Value,
     coerced: bool,
     allocator: std.mem.Allocator,
-    
+
     pub fn deinit(self: *CoercionResult) void {
         if (self.coerced) {
             // Clean up allocated memory for coerced values
@@ -87,7 +87,7 @@ pub fn coerceToSchema(
             // Try to find exactly one schema that matches
             var matches: u32 = 0;
             var result: ?CoercionResult = null;
-            
+
             for (schemas) |schema| {
                 if (coerceToSchema(allocator, value, schema, options)) |coerced| {
                     matches += 1;
@@ -95,11 +95,11 @@ pub fn coerceToSchema(
                     result = coerced;
                 } else |_| {}
             }
-            
+
             if (matches == 1 and result != null) {
                 return result.?;
             }
-            
+
             if (result) |*r| r.deinit();
             return error.NotExactlyOneMatch;
         },
@@ -111,12 +111,12 @@ fn coerceToString(allocator: std.mem.Allocator, value: std.json.Value, options: 
         .string => |s| {
             if (options.trim_strings or options.string_case != null) {
                 var processed = s;
-                
+
                 // Trim whitespace
                 if (options.trim_strings) {
                     processed = std.mem.trim(u8, processed, " \t\r\n");
                 }
-                
+
                 // Convert case
                 const final_string = if (options.string_case) |case| blk: {
                     const result = try allocator.alloc(u8, processed.len);
@@ -152,14 +152,14 @@ fn coerceToString(allocator: std.mem.Allocator, value: std.json.Value, options: 
                 } else blk: {
                     break :blk s;
                 };
-                
+
                 return CoercionResult{
                     .value = .{ .string = final_string },
                     .coerced = final_string.ptr != s.ptr,
                     .allocator = allocator,
                 };
             }
-            
+
             return CoercionResult{
                 .value = value,
                 .coerced = false,
@@ -226,7 +226,7 @@ fn coerceToNumber(allocator: std.mem.Allocator, value: std.json.Value, options: 
         .string => |s| {
             if (options.string_to_number) {
                 const trimmed = std.mem.trim(u8, s, " \t\r\n");
-                
+
                 // Try parsing as integer first
                 if (std.fmt.parseInt(i64, trimmed, 10)) |i| {
                     return CoercionResult{
@@ -235,7 +235,7 @@ fn coerceToNumber(allocator: std.mem.Allocator, value: std.json.Value, options: 
                         .allocator = allocator,
                     };
                 } else |_| {}
-                
+
                 // Try parsing as float
                 if (std.fmt.parseFloat(f64, trimmed)) |f| {
                     return CoercionResult{
@@ -284,17 +284,17 @@ fn coerceToBoolean(allocator: std.mem.Allocator, value: std.json.Value, options:
             if (options.string_to_boolean) {
                 const lower = std.ascii.lowerString(s, try allocator.alloc(u8, s.len));
                 defer allocator.free(lower);
-                
+
                 const is_true = std.mem.eql(u8, lower, "true") or
                     std.mem.eql(u8, lower, "yes") or
                     std.mem.eql(u8, lower, "1") or
                     std.mem.eql(u8, lower, "on");
-                    
+
                 const is_false = std.mem.eql(u8, lower, "false") or
                     std.mem.eql(u8, lower, "no") or
                     std.mem.eql(u8, lower, "0") or
                     std.mem.eql(u8, lower, "off");
-                
+
                 if (is_true) {
                     return CoercionResult{
                         .value = .{ .bool = true },
@@ -347,7 +347,7 @@ fn coerceToBoolean(allocator: std.mem.Allocator, value: std.json.Value, options:
 
 fn coerceToNull(allocator: std.mem.Allocator, value: std.json.Value, options: CoercionOptions) !CoercionResult {
     _ = options;
-    
+
     switch (value) {
         .null => {
             return CoercionResult{
@@ -371,9 +371,9 @@ fn coerceToArray(
             if (array_schema.items) |item_schema| {
                 var coerced_items = std.ArrayList(std.json.Value).init(allocator);
                 errdefer coerced_items.deinit();
-                
+
                 var any_coerced = false;
-                
+
                 for (arr.items) |item| {
                     const result = try coerceToSchema(allocator, item, item_schema.*, options);
                     try coerced_items.append(result.value);
@@ -381,7 +381,7 @@ fn coerceToArray(
                         any_coerced = true;
                     }
                 }
-                
+
                 if (any_coerced) {
                     return CoercionResult{
                         .value = .{ .array = coerced_items },
@@ -390,7 +390,7 @@ fn coerceToArray(
                     };
                 }
             }
-            
+
             return CoercionResult{
                 .value = value,
                 .coerced = false,
@@ -411,15 +411,15 @@ fn coerceToObject(
         .object => |obj| {
             var coerced_obj = std.json.ObjectMap.init(allocator);
             errdefer coerced_obj.deinit();
-            
+
             var any_coerced = false;
-            
+
             // Process existing properties
             var iter = obj.iterator();
             while (iter.next()) |entry| {
                 const key = entry.key_ptr.*;
                 const val = entry.value_ptr.*;
-                
+
                 // Check if property has a schema
                 if (object_schema.properties.get(key)) |prop_schema| {
                     const result = try coerceToSchema(allocator, val, prop_schema, options);
@@ -433,7 +433,7 @@ fn coerceToObject(
                 }
                 // Else: drop additional properties if not allowed
             }
-            
+
             // Add defaults for missing required properties
             if (options.null_to_defaults) {
                 for (object_schema.required) |req_prop| {
@@ -447,7 +447,7 @@ fn coerceToObject(
                     }
                 }
             }
-            
+
             if (any_coerced) {
                 return CoercionResult{
                     .value = .{ .object = coerced_obj },
@@ -455,7 +455,7 @@ fn coerceToObject(
                     .allocator = allocator,
                 };
             }
-            
+
             return CoercionResult{
                 .value = value,
                 .coerced = false,
@@ -482,13 +482,13 @@ fn getDefaultForSchema(schema_node: validator.SchemaNode) ?std.json.Value {
 test "coerce string to number" {
     const allocator = std.testing.allocator;
     const options = CoercionOptions{};
-    
+
     const string_value = std.json.Value{ .string = "42" };
     const number_schema = validator.SchemaNode{ .number = validator.NumberSchema{} };
-    
+
     var result = try coerceToSchema(allocator, string_value, number_schema, options);
     defer result.deinit();
-    
+
     try std.testing.expect(result.coerced);
     try std.testing.expectEqual(std.json.Value{ .integer = 42 }, result.value);
 }
@@ -496,13 +496,13 @@ test "coerce string to number" {
 test "coerce with string trimming" {
     const allocator = std.testing.allocator;
     const options = CoercionOptions{ .trim_strings = true };
-    
+
     const string_value = std.json.Value{ .string = "  hello  " };
     const string_schema = validator.SchemaNode{ .string = validator.StringSchema{} };
-    
+
     var result = try coerceToSchema(allocator, string_value, string_schema, options);
     defer result.deinit();
-    
+
     try std.testing.expect(result.coerced);
     try std.testing.expectEqualStrings("hello", result.value.string);
 }
@@ -510,26 +510,26 @@ test "coerce with string trimming" {
 test "coerce string to boolean" {
     const allocator = std.testing.allocator;
     const options = CoercionOptions{};
-    
+
     const true_values = [_][]const u8{ "true", "yes", "1", "on" };
     const false_values = [_][]const u8{ "false", "no", "0", "off" };
-    
+
     const bool_schema = validator.SchemaNode{ .boolean = validator.BooleanSchema{} };
-    
+
     for (true_values) |val| {
         const string_value = std.json.Value{ .string = val };
         var result = try coerceToSchema(allocator, string_value, bool_schema, options);
         defer result.deinit();
-        
+
         try std.testing.expect(result.coerced);
         try std.testing.expect(result.value.bool);
     }
-    
+
     for (false_values) |val| {
         const string_value = std.json.Value{ .string = val };
         var result = try coerceToSchema(allocator, string_value, bool_schema, options);
         defer result.deinit();
-        
+
         try std.testing.expect(result.coerced);
         try std.testing.expect(!result.value.bool);
     }

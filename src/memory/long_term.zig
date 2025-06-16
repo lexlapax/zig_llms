@@ -9,12 +9,12 @@ pub const VectorStore = struct {
         _ = allocator;
         return VectorStore{};
     }
-    
+
     pub fn deinit(self: *VectorStore) void {
         _ = self;
         // TODO: Cleanup vector store
     }
-    
+
     pub fn store(self: *VectorStore, id: []const u8, embedding: []const f32, metadata: ?std.json.Value) !void {
         _ = self;
         _ = id;
@@ -22,7 +22,7 @@ pub const VectorStore = struct {
         _ = metadata;
         // TODO: Store vector with metadata
     }
-    
+
     pub fn search(self: *VectorStore, query_embedding: []const f32, limit: u32) ![]SearchResult {
         _ = self;
         _ = query_embedding;
@@ -30,7 +30,7 @@ pub const VectorStore = struct {
         // TODO: Implement semantic search
         return &[_]SearchResult{};
     }
-    
+
     pub fn delete(self: *VectorStore, id: []const u8) !void {
         _ = self;
         _ = id;

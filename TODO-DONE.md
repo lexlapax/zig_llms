@@ -743,3 +743,13 @@
   - Integrated execution with LuaEngine's executeScript and executeFunction
   - Created comprehensive examples demonstrating all features
   - Added tests for execution and value conversion
+
+- [x] 21.6. Create lua_pcall wrapper with proper error propagation - Completed 2025-06-16
+  - Implemented PCallWrapper with comprehensive error handling
+  - Added support for error handlers and debug.traceback integration
+  - Created timeout and resource limit hooks (foundation for future implementation)
+  - Implemented sandboxed environment creation for secure execution
+  - Added callGlobal, callMethod, and resumeCoroutine functionality
+  - Integrated PCallWrapper into LuaExecutor for safe script execution
+  - Fixed compilation errors related to type conversions and unused parameters
+  - Created comprehensive demo showing error handling and recovery

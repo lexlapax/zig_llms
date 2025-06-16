@@ -8,7 +8,7 @@ pub const PromptTemplate = struct {
     template: []const u8,
     variables: std.StringHashMap([]const u8),
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator, template: []const u8) PromptTemplate {
         return PromptTemplate{
             .template = template,
@@ -16,23 +16,24 @@ pub const PromptTemplate = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *PromptTemplate) void {
         self.variables.deinit();
     }
-    
+
     pub fn setVariable(self: *PromptTemplate, name: []const u8, value: []const u8) !void {
         try self.variables.put(name, value);
     }
-    
+
     pub fn render(self: *PromptTemplate) ![]const u8 {
         var result = std.ArrayList(u8).init(self.allocator);
         defer result.deinit();
-        
+
         var i: usize = 0;
         while (i < self.template.len) {
-            if (i + 1 < self.template.len and 
-                self.template[i] == '{' and self.template[i + 1] == '{') {
+            if (i + 1 < self.template.len and
+                self.template[i] == '{' and self.template[i + 1] == '{')
+            {
                 // Find closing braces
                 const start = i + 2;
                 var end = start;
@@ -42,14 +43,14 @@ pub const PromptTemplate = struct {
                     }
                     end += 1;
                 }
-                
+
                 if (end + 1 < self.template.len) {
                     const var_name = self.template[start..end];
                     if (self.variables.get(var_name)) |value| {
                         try result.appendSlice(value);
                     } else {
                         // Variable not found, keep original
-                        try result.appendSlice(self.template[i..end + 2]);
+                        try result.appendSlice(self.template[i .. end + 2]);
                     }
                     i = end + 2;
                 } else {
@@ -61,7 +62,7 @@ pub const PromptTemplate = struct {
                 i += 1;
             }
         }
-        
+
         return result.toOwnedSlice();
     }
 };
@@ -71,7 +72,7 @@ pub const PromptBuilder = struct {
     user_prompts: std.ArrayList([]const u8),
     assistant_prompts: std.ArrayList([]const u8),
     allocator: std.mem.Allocator,
-    
+
     pub fn init(allocator: std.mem.Allocator) PromptBuilder {
         return PromptBuilder{
             .user_prompts = std.ArrayList([]const u8).init(allocator),
@@ -79,28 +80,28 @@ pub const PromptBuilder = struct {
             .allocator = allocator,
         };
     }
-    
+
     pub fn deinit(self: *PromptBuilder) void {
         self.user_prompts.deinit();
         self.assistant_prompts.deinit();
     }
-    
+
     pub fn setSystemPrompt(self: *PromptBuilder, prompt: []const u8) void {
         self.system_prompt = prompt;
     }
-    
+
     pub fn addUserMessage(self: *PromptBuilder, message: []const u8) !void {
         try self.user_prompts.append(message);
     }
-    
+
     pub fn addAssistantMessage(self: *PromptBuilder, message: []const u8) !void {
         try self.assistant_prompts.append(message);
     }
-    
+
     pub fn build(self: *PromptBuilder) ![]types.Message {
         var messages = std.ArrayList(types.Message).init(self.allocator);
         defer messages.deinit();
-        
+
         // Add system message if present
         if (self.system_prompt) |sys_prompt| {
             try messages.append(types.Message{
@@ -108,7 +109,7 @@ pub const PromptBuilder = struct {
                 .content = .{ .text = sys_prompt },
             });
         }
-        
+
         // Interleave user and assistant messages
         const max_len = @max(self.user_prompts.items.len, self.assistant_prompts.items.len);
         for (0..max_len) |i| {
@@ -125,13 +126,13 @@ pub const PromptBuilder = struct {
                 });
             }
         }
-        
+
         return messages.toOwnedSlice();
     }
 };
 
 // Common prompt templates
-pub const CHAT_TEMPLATE = 
+pub const CHAT_TEMPLATE =
     \\You are a helpful AI assistant. 
     \\{{context}}
     \\
@@ -139,7 +140,7 @@ pub const CHAT_TEMPLATE =
     \\Assistant:
 ;
 
-pub const TOOL_USE_TEMPLATE = 
+pub const TOOL_USE_TEMPLATE =
     \\You are an AI assistant with access to tools. 
     \\Available tools: {{tools}}
     \\
@@ -151,15 +152,15 @@ pub const TOOL_USE_TEMPLATE =
 
 test "prompt template" {
     const allocator = std.testing.allocator;
-    
+
     var template = PromptTemplate.init(allocator, "Hello {{name}}, welcome to {{place}}!");
     defer template.deinit();
-    
+
     try template.setVariable("name", "World");
     try template.setVariable("place", "Zig");
-    
+
     const result = try template.render();
     defer allocator.free(result);
-    
+
     try std.testing.expectEqualStrings("Hello World, welcome to Zig!", result);
 }

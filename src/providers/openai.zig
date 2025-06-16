@@ -78,29 +78,29 @@ pub const OpenAIProvider = struct {
     http_client: PooledHttpClient,
     retry_client: RetryableHttpClient,
     allocator: std.mem.Allocator,
-    
+
     const vtable = Provider.VTable{
         .generate = generate,
         .generateStream = generateStream,
         .getMetadata = getMetadata,
         .close = close,
     };
-    
+
     pub fn create(allocator: std.mem.Allocator, config: OpenAIConfig) !*Provider {
         const provider = try allocator.create(OpenAIProvider);
-        
+
         const pool_config = ConnectionPoolConfig{
             .max_connections = 10,
             .max_idle_time_ms = 300000,
         };
-        
+
         const client_config = HttpClientConfig{
             .timeout_ms = config.timeout_ms,
             .user_agent = "zig-llms-openai/1.0.0",
         };
-        
+
         const pooled_client = PooledHttpClient.init(allocator, pool_config, client_config);
-        
+
         // Configure retry logic for OpenAI API
         const retry_config = RetryConfig{
             .max_attempts = config.max_retries,
@@ -111,10 +111,10 @@ pub const OpenAIProvider = struct {
             // OpenAI specific retry status codes
             .retry_on_status_codes = &[_]u16{ 429, 500, 502, 503, 504, 520, 521, 522, 523, 524 },
         };
-        
+
         // Create a basic HTTP client for the retry wrapper
         const basic_client = HttpClient.init(allocator, client_config);
-        
+
         provider.* = OpenAIProvider{
             .base = Provider{ .vtable = &vtable },
             .config = config,
@@ -122,14 +122,14 @@ pub const OpenAIProvider = struct {
             .retry_client = RetryableHttpClient.init(allocator, basic_client, retry_config),
             .allocator = allocator,
         };
-        
+
         return &provider.base;
     }
-    
+
     fn convertMessages(allocator: std.mem.Allocator, messages: []const types.Message) ![]ChatMessage {
         var chat_messages = try std.ArrayList(ChatMessage).initCapacity(allocator, messages.len);
         defer chat_messages.deinit();
-        
+
         for (messages) |message| {
             const role_str = switch (message.role) {
                 .system => "system",
@@ -137,7 +137,7 @@ pub const OpenAIProvider = struct {
                 .assistant => "assistant",
                 .function => "function",
             };
-            
+
             const content = switch (message.content) {
                 .text => |text| text,
                 .multimodal => |_| {
@@ -146,83 +146,79 @@ pub const OpenAIProvider = struct {
                     "[Multimodal content not yet supported]";
                 },
             };
-            
+
             try chat_messages.append(ChatMessage{
                 .role = role_str,
                 .content = content,
             });
         }
-        
+
         return chat_messages.toOwnedSlice();
     }
-    
+
     fn convertResponse(allocator: std.mem.Allocator, openai_response: ChatCompletionResponse) !types.Response {
         if (openai_response.choices.len == 0) {
             return error.NoChoicesInResponse;
         }
-        
+
         const choice = openai_response.choices[0];
         const content = try allocator.dupe(u8, choice.message.content);
-        
+
         const usage = if (openai_response.usage) |u| types.Usage{
             .prompt_tokens = u.prompt_tokens,
             .completion_tokens = u.completion_tokens,
             .total_tokens = u.total_tokens,
         } else null;
-        
+
         return types.Response{
             .content = content,
             .usage = usage,
             .metadata = null, // TODO: Add metadata if needed
         };
     }
-    
+
     fn buildRequestUrl(self: *const OpenAIProvider, endpoint: []const u8) ![]const u8 {
         return std.fmt.allocPrint(self.allocator, "{s}/{s}", .{ self.config.base_url, endpoint });
     }
-    
+
     fn makeRequest(self: *OpenAIProvider, request_data: ChatCompletionRequest) !ChatCompletionResponse {
         const url = try self.buildRequestUrl("chat/completions");
         defer self.allocator.free(url);
-        
+
         var http_request = @import("../http/client.zig").request(self.allocator, .POST, url);
         defer http_request.deinit();
-        
+
         // Set headers
         try http_request.setBearerAuth(self.config.api_key);
         try http_request.setHeader("Content-Type", "application/json");
-        
+
         if (self.config.organization) |org| {
             try http_request.setHeader("OpenAI-Organization", org);
         }
-        
+
         // Set JSON body
         try http_request.setJsonBody(request_data);
-        
+
         // Execute request with retry logic for production use
         // For testing, you could use self.http_client.execute(&http_request) directly
         const retry_result = try self.retry_client.execute(&http_request);
-        
+
         if (!retry_result.succeeded) {
             std.log.err("All retry attempts failed for OpenAI API request", .{});
             return retry_result.last_error orelse error.OpenAIAPIError;
         }
-        
+
         var response = retry_result.response orelse return error.NoResponse;
         defer response.deinit();
-        
+
         if (!response.isSuccess()) {
             // Try to parse error response
             if (response.parseJson(OpenAIErrorResponse)) |error_parsed| {
                 defer error_parsed.deinit();
-                
-                const error_msg = try std.fmt.allocPrint(
-                    self.allocator,
-                    "OpenAI API error ({d}): {s}",
-                    .{ response.status_code, error_parsed.value.@"error".message }
-                );
+
+                const error_msg = try std.fmt.allocPrint(self.allocator, "OpenAI API error ({d}): {s}", .{ response.status_code, error_parsed.value.@"error".message });
                 defer self.allocator.free(error_msg);
-                
+
                 std.log.err("{s}", .{error_msg});
                 return error.OpenAIAPIError;
             } else |_| {
@@ -230,21 +226,21 @@ pub const OpenAIProvider = struct {
                 return error.OpenAIAPIError;
             }
         }
-        
+
         // Parse successful response
         const parsed = try response.parseJson(ChatCompletionResponse);
         defer parsed.deinit();
-        
+
         return parsed.value;
     }
-    
+
     fn generate(base: *Provider, messages: []const types.Message, options: types.GenerateOptions) !types.Response {
         const self: *OpenAIProvider = @fieldParentPtr("base", base);
-        
+
         // Convert messages to OpenAI format
         const chat_messages = try self.convertMessages(self.allocator, messages);
         defer self.allocator.free(chat_messages);
-        
+
         // Build request
         const request_data = ChatCompletionRequest{
             .model = self.config.model,
@@ -255,28 +251,28 @@ pub const OpenAIProvider = struct {
             .stop = options.stop_sequences,
             .stream = options.stream,
         };
-        
+
         // Make API request
         const openai_response = try self.makeRequest(request_data);
-        
+
         // Convert response
         return self.convertResponse(self.allocator, openai_response);
     }
-    
+
     fn generateStream(base: *Provider, messages: []const types.Message, options: types.GenerateOptions) !types.StreamResponse {
         _ = base;
         _ = messages;
         _ = options;
-        
+
         // TODO: Implement streaming support
         return types.StreamResponse{};
     }
-    
+
     fn getMetadata(base: *Provider) ProviderMetadata {
         _ = base;
         return OPENAI_METADATA;
     }
-    
+
     fn close(base: *Provider) void {
         const self: *OpenAIProvider = @fieldParentPtr("base", base);
         self.http_client.deinit();
@@ -294,44 +290,44 @@ pub fn createFromEnvironment(allocator: std.mem.Allocator) !*Provider {
     const api_key = std.posix.getenv("OPENAI_API_KEY") orelse return error.MissingAPIKey;
     const model = std.posix.getenv("OPENAI_MODEL") orelse "gpt-4";
     const organization = std.posix.getenv("OPENAI_ORGANIZATION");
-    
+
     const config = OpenAIConfig{
         .api_key = api_key,
         .model = model,
         .organization = organization,
     };
-    
+
     return createProvider(allocator, config);
 }
 
 // Tests
 test "openai provider creation" {
     const allocator = std.testing.allocator;
-    
+
     const config = OpenAIConfig{
         .api_key = "test-api-key",
         .model = "gpt-3.5-turbo",
     };
-    
+
     const provider = try OpenAIProvider.create(allocator, config);
     defer provider.vtable.close(provider);
-    
+
     const metadata = provider.vtable.getMetadata(provider);
     try std.testing.expectEqualStrings("openai", metadata.name);
 }
 
 test "message conversion" {
     const allocator = std.testing.allocator;
-    
+
     const config = OpenAIConfig{
         .api_key = "test-api-key",
     };
-    
+
     const provider_ptr = try OpenAIProvider.create(allocator, config);
     defer provider_ptr.vtable.close(provider_ptr);
-    
+
     const provider: *OpenAIProvider = @fieldParentPtr("base", provider_ptr);
-    
+
     const messages = [_]types.Message{
         .{
             .role = .system,
@@ -342,10 +338,10 @@ test "message conversion" {
             .content = .{ .text = "Hello, how are you?" },
         },
     };
-    
+
     const chat_messages = try provider.convertMessages(allocator, &messages);
     defer allocator.free(chat_messages);
-    
+
     try std.testing.expectEqual(@as(usize, 2), chat_messages.len);
     try std.testing.expectEqualStrings("system", chat_messages[0].role);
     try std.testing.expectEqualStrings("You are a helpful assistant.", chat_messages[0].content);
@@ -355,19 +351,19 @@ test "message conversion" {
 
 test "request url building" {
     const allocator = std.testing.allocator;
-    
+
     const config = OpenAIConfig{
         .api_key = "test-api-key",
         .base_url = "https://api.openai.com/v1",
     };
-    
+
     const provider_ptr = try OpenAIProvider.create(allocator, config);
     defer provider_ptr.vtable.close(provider_ptr);
-    
+
     const provider: *OpenAIProvider = @fieldParentPtr("base", provider_ptr);
-    
+
     const url = try provider.buildRequestUrl("chat/completions");
     defer allocator.free(url);
-    
+
     try std.testing.expectEqualStrings("https://api.openai.com/v1/chat/completions", url);
 }

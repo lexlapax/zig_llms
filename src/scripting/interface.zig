@@ -140,6 +140,8 @@ pub const ScriptingEngine = struct {
     
     // Convenience methods that delegate to vtable
     pub fn init(allocator: std.mem.Allocator, config: EngineConfig) !*Self {
+        _ = allocator;
+        _ = config;
         return error.NotImplemented; // Engines create instances, not this interface
     }
     

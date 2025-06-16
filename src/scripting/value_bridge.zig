@@ -466,9 +466,9 @@ test "ScriptValue equality" {
     const testing = std.testing;
     
     try testing.expect(ScriptValue.nil.eql(ScriptValue.nil));
-    try testing.expect(ScriptValue{ .boolean = true }.eql(ScriptValue{ .boolean = true }));
-    try testing.expect(!ScriptValue{ .boolean = true }.eql(ScriptValue{ .boolean = false }));
-    try testing.expect(ScriptValue{ .integer = 42 }.eql(ScriptValue{ .integer = 42 }));
-    try testing.expect(ScriptValue{ .number = 3.14 }.eql(ScriptValue{ .number = 3.14 }));
-    try testing.expect(ScriptValue{ .string = "hello" }.eql(ScriptValue{ .string = "hello" }));
+    try testing.expect((ScriptValue{ .boolean = true }).eql(ScriptValue{ .boolean = true }));
+    try testing.expect(!(ScriptValue{ .boolean = true }).eql(ScriptValue{ .boolean = false }));
+    try testing.expect((ScriptValue{ .integer = 42 }).eql(ScriptValue{ .integer = 42 }));
+    try testing.expect((ScriptValue{ .float = 3.14 }).eql(ScriptValue{ .float = 3.14 }));
+    try testing.expect((ScriptValue{ .string = "hello" }).eql(ScriptValue{ .string = "hello" }));
 }

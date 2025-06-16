@@ -4,6 +4,7 @@
 const std = @import("std");
 const ScriptingEngine = @import("interface.zig").ScriptingEngine;
 const EngineConfig = @import("interface.zig").EngineConfig;
+const LuaEngine = @import("engines/lua_engine.zig").LuaEngine;
 
 /// Engine factory function signature
 pub const EngineFactory = *const fn (allocator: std.mem.Allocator, config: EngineConfig) anyerror!*ScriptingEngine;
@@ -234,9 +235,28 @@ pub const EngineRegistry = struct {
 pub fn autoDiscoverEngines(allocator: std.mem.Allocator) !void {
     const registry = try EngineRegistry.getInstance(allocator);
     
-    // This will be implemented when we have actual engines
-    // For now, it's a placeholder for the discovery mechanism
-    _ = registry;
+    // Register Lua engine if available
+    const lua = @import("../bindings/lua/lua.zig");
+    if (lua.lua_enabled) {
+        const lua_info = EngineInfo{
+            .name = "lua",
+            .display_name = "Lua 5.4",
+            .version = "5.4.6",
+            .extensions = &[_][]const u8{".lua"},
+            .factory = LuaEngine.create,
+            .features = .{
+                .async_support = true,
+                .debugging = true,
+                .sandboxing = true,
+                .hot_reload = false,
+                .native_json = false,
+                .native_regex = false,
+            },
+            .description = "Lua 5.4 scripting engine with coroutine support",
+        };
+        
+        try registry.registerEngine(lua_info);
+    }
 }
 
 // Tests

@@ -241,10 +241,10 @@ pub const ErrorRecovery = enum {
 /// Error handler callback
 pub const ErrorHandler = struct {
     context: *anyopaque,
-    callback: *const fn (context: *anyopaque, error: *const ScriptError) ErrorRecovery,
+    callback: *const fn (context: *anyopaque, err: *const ScriptError) ErrorRecovery,
     
-    pub fn handle(self: *const ErrorHandler, error: *const ScriptError) ErrorRecovery {
-        return self.callback(self.context, error);
+    pub fn handle(self: *const ErrorHandler, err: *const ScriptError) ErrorRecovery {
+        return self.callback(self.context, err);
     }
 };
 

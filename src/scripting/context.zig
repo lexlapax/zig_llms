@@ -105,7 +105,7 @@ pub const ScriptContext = struct {
         ready,
         executing,
         suspended,
-        error,
+        err,
         terminated,
     };
     
@@ -288,7 +288,7 @@ pub const ScriptContext = struct {
         }
         
         self.last_error = err;
-        self.state = .error;
+        self.state = .err;
     }
     
     /// Get last error
@@ -308,7 +308,7 @@ pub const ScriptContext = struct {
             self.last_error = null;
         }
         
-        if (self.state == .error) {
+        if (self.state == .err) {
             self.state = .ready;
         }
     }

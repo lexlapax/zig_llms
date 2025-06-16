@@ -122,6 +122,39 @@ pub const outputs = struct {
 // Event system
 pub const events = @import("events.zig");
 
+// Scripting system
+pub const scripting = struct {
+    pub const ScriptingEngine = @import("scripting/interface.zig").ScriptingEngine;
+    pub const EngineConfig = @import("scripting/interface.zig").EngineConfig;
+    pub const ScriptModule = @import("scripting/interface.zig").ScriptModule;
+    pub const ScriptFunction = @import("scripting/interface.zig").ScriptFunction;
+    
+    pub const ScriptValue = @import("scripting/value_bridge.zig").ScriptValue;
+    pub const ScriptError = @import("scripting/error_bridge.zig").ScriptError;
+    pub const ScriptContext = @import("scripting/context.zig").ScriptContext;
+    
+    pub const EngineRegistry = @import("scripting/registry.zig").EngineRegistry;
+    pub const EngineInfo = @import("scripting/registry.zig").EngineInfo;
+    pub const autoDiscoverEngines = @import("scripting/registry.zig").autoDiscoverEngines;
+    
+    pub const engines = struct {
+        pub const LuaEngine = @import("scripting/engines/lua_engine.zig").LuaEngine;
+    };
+    
+    pub const api_bridges = struct {
+        pub const agent_bridge = @import("scripting/api_bridges/agent_bridge.zig");
+        pub const tool_bridge = @import("scripting/api_bridges/tool_bridge.zig");
+        pub const workflow_bridge = @import("scripting/api_bridges/workflow_bridge.zig");
+        pub const provider_bridge = @import("scripting/api_bridges/provider_bridge.zig");
+        pub const event_bridge = @import("scripting/api_bridges/event_bridge.zig");
+        pub const test_bridge = @import("scripting/api_bridges/test_bridge.zig");
+        pub const schema_bridge = @import("scripting/api_bridges/schema_bridge.zig");
+        pub const memory_bridge = @import("scripting/api_bridges/memory_bridge.zig");
+        pub const hook_bridge = @import("scripting/api_bridges/hook_bridge.zig");
+        pub const output_bridge = @import("scripting/api_bridges/output_bridge.zig");
+    };
+};
+
 // Utilities
 pub const util = @import("util.zig");
 

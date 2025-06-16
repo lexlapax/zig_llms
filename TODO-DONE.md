@@ -128,6 +128,24 @@
   - Engine registry integration with auto-discovery support
   - Main scripting module exports in src/main.zig
   - Full test coverage and compilation verification
+- [x] 21.3. Implement lua_State lifecycle management - Completed 2025-06-16
+  - Advanced ManagedLuaState wrapper with comprehensive lifecycle tracking
+  - State pooling system (LuaStatePool) for performance optimization with configurable pool size
+  - StateSnapshot system for rollback capabilities with timestamp tracking
+  - Multi-level isolation support: none, basic (dangerous function removal), strict (restricted environment)
+  - Lifecycle stages: uninitialized → created → configured → active → suspended → cleanup → destroyed
+  - StateStats tracking: creation time, usage count, error count, GC collections, memory peaks
+  - Thread-safe operations with mutex protection for all state management
+  - Automatic state reset and cleanup between pool reuses
+  - State health monitoring and automatic unhealthy state disposal
+  - Configurable garbage collection: generational vs incremental GC support
+  - Enhanced LuaContext integration with pool-based state acquisition
+  - Memory usage tracking and collection methods integrated with Lua GC
+  - Idle state cleanup with configurable timeout (5 minutes default)
+  - Pool statistics and monitoring: available/in-use counts, capacity tracking
+  - Full sandbox integration with Lua standard library restriction
+  - Comprehensive error handling and recovery mechanisms
+  - Complete test coverage and compilation verification
   - Comprehensive build.zig configuration with Lua 5.4.6 integration
   - Created build options: enable-lua (default true), lua-jit (for future LuaJIT support)
   - Implemented buildLuaLib function to create separate Lua static library

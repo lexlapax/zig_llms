@@ -13,6 +13,9 @@ const ScriptError = @import("../error_bridge.zig").ScriptError;
 const ScriptContext = @import("../context.zig").ScriptContext;
 
 const lua = @import("../../bindings/lua/lua.zig");
+const LuaStatePool = @import("lua_lifecycle.zig").LuaStatePool;
+const ManagedLuaState = @import("lua_lifecycle.zig").ManagedLuaState;
+const StateStats = @import("lua_lifecycle.zig").StateStats;
 
 /// Lua scripting engine error types
 pub const LuaEngineError = error{
@@ -26,37 +29,37 @@ pub const LuaEngineError = error{
     TypeConversionError,
 } || lua.LuaError || std.mem.Allocator.Error;
 
-/// Lua-specific context data
+/// Enhanced Lua context with lifecycle management
 const LuaContext = struct {
     name: []const u8,
-    wrapper: *lua.LuaWrapper,
+    managed_state: *ManagedLuaState,
     last_error: ?ScriptError,
     allocator: std.mem.Allocator,
-    memory_usage: std.atomic.Value(usize),
+    pool: *LuaStatePool,
     
-    pub fn init(allocator: std.mem.Allocator, name: []const u8) !*LuaContext {
+    pub fn init(allocator: std.mem.Allocator, name: []const u8, pool: *LuaStatePool) !*LuaContext {
         const self = try allocator.create(LuaContext);
         errdefer allocator.destroy(self);
         
-        const wrapper = try lua.LuaWrapper.init(allocator);
-        errdefer wrapper.deinit();
+        const managed_state = try pool.acquire();
+        errdefer pool.release(managed_state);
         
         const name_copy = try allocator.dupe(u8, name);
         errdefer allocator.free(name_copy);
         
         self.* = LuaContext{
             .name = name_copy,
-            .wrapper = wrapper,
+            .managed_state = managed_state,
             .last_error = null,
             .allocator = allocator,
-            .memory_usage = std.atomic.Value(usize).init(0),
+            .pool = pool,
         };
         
         return self;
     }
     
     pub fn deinit(self: *LuaContext) void {
-        self.wrapper.deinit();
+        self.pool.release(self.managed_state);
         self.allocator.free(self.name);
         if (self.last_error) |*err| {
             err.deinit(self.allocator);
@@ -75,6 +78,33 @@ const LuaContext = struct {
         self.clearError();
         self.last_error = ScriptError.init(self.allocator, error_type, message, null) catch return;
     }
+    
+    pub fn getWrapper(self: *LuaContext) *lua.LuaWrapper {
+        return self.managed_state.wrapper;
+    }
+    
+    pub fn execute(self: *LuaContext, code: []const u8) !void {
+        self.managed_state.execute(code) catch |err| {
+            self.setError(.execution_error, "Script execution failed");
+            return err;
+        };
+    }
+    
+    pub fn createSnapshot(self: *LuaContext) !void {
+        try self.managed_state.createSnapshot();
+    }
+    
+    pub fn restoreSnapshot(self: *LuaContext, index: usize) !void {
+        try self.managed_state.restoreSnapshot(index);
+    }
+    
+    pub fn getMemoryUsage(self: *LuaContext) usize {
+        return self.managed_state.getMemoryUsage();
+    }
+    
+    pub fn collectGarbage(self: *LuaContext) void {
+        self.managed_state.collectGarbage();
+    }
 };
 
 /// Main Lua engine implementation
@@ -86,6 +116,7 @@ pub const LuaEngine = struct {
     config: EngineConfig,
     contexts: std.StringHashMap(*LuaContext),
     context_mutex: std.Thread.Mutex,
+    state_pool: *LuaStatePool,
     
     const vtable = ScriptingEngine.VTable{
         .init = init,
@@ -118,6 +149,13 @@ pub const LuaEngine = struct {
         const self = try allocator.create(LuaEngine);
         errdefer allocator.destroy(self);
         
+        // Create state pool with reasonable defaults
+        const pool_size = if (config.max_memory_bytes > 0) 
+            @min(8, config.max_memory_bytes / (10 * 1024 * 1024)) // ~10MB per state
+        else 8; // Default pool size
+        const state_pool = try LuaStatePool.init(allocator, config, pool_size);
+        errdefer state_pool.deinit();
+        
         self.* = LuaEngine{
             .base = ScriptingEngine{
                 .name = "lua",
@@ -138,6 +176,7 @@ pub const LuaEngine = struct {
             .config = config,
             .contexts = std.StringHashMap(*LuaContext).init(allocator),
             .context_mutex = std.Thread.Mutex{},
+            .state_pool = state_pool,
         };
         
         return &self.base;
@@ -162,6 +201,9 @@ pub const LuaEngine = struct {
         }
         self.contexts.deinit();
         
+        // Clean up state pool
+        self.state_pool.deinit();
+        
         self.allocator.destroy(self);
     }
     
@@ -177,7 +219,7 @@ pub const LuaEngine = struct {
         }
         
         // Create Lua context
-        const lua_context = try LuaContext.init(self.allocator, context_name);
+        const lua_context = try LuaContext.init(self.allocator, context_name, self.state_pool);
         errdefer lua_context.deinit();
         
         // Create script context wrapper
@@ -207,7 +249,7 @@ pub const LuaEngine = struct {
         _ = name; // TODO: Use for better error reporting
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
-        lua_context.wrapper.doString(source) catch |err| {
+        lua_context.execute(source) catch |err| {
             lua_context.setError(.execution_error, "Script loading failed");
             return err;
         };
@@ -216,7 +258,7 @@ pub const LuaEngine = struct {
     fn loadFile(context: *ScriptContext, path: []const u8) anyerror!void {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
-        lua_context.wrapper.doFile(path) catch |err| {
+        lua_context.getWrapper().doFile(path) catch |err| {
             lua_context.setError(.execution_error, "File loading failed");
             return err;
         };
@@ -225,18 +267,19 @@ pub const LuaEngine = struct {
     fn executeScript(context: *ScriptContext, source: []const u8) anyerror!ScriptValue {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
-        const initial_top = lua_context.wrapper.getTop();
+        const wrapper = lua_context.getWrapper();
+        const initial_top = wrapper.getTop();
         
-        lua_context.wrapper.doString(source) catch |err| {
+        lua_context.execute(source) catch |err| {
             lua_context.setError(.execution_error, "Script execution failed");
             return err;
         };
         
         // If there's a return value on the stack, convert it
-        const current_top = lua_context.wrapper.getTop();
+        const current_top = wrapper.getTop();
         if (current_top > initial_top) {
             const result = try luaValueToScriptValue(lua_context, -1);
-            lua_context.wrapper.pop(current_top - initial_top);
+            wrapper.pop(current_top - initial_top);
             return result;
         }
         
@@ -246,10 +289,12 @@ pub const LuaEngine = struct {
     fn executeFunction(context: *ScriptContext, func_name: []const u8, args: []const ScriptValue) anyerror!ScriptValue {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
+        const wrapper = lua_context.getWrapper();
+        
         // Get the function
-        try lua_context.wrapper.getGlobal(func_name);
-        if (!lua_context.wrapper.isFunction(-1)) {
-            lua_context.wrapper.pop(1);
+        try wrapper.getGlobal(func_name);
+        if (!wrapper.isFunction(-1)) {
+            wrapper.pop(1);
             lua_context.setError(.execution_error, "Function not found or not callable");
             return LuaEngineError.ExecutionFailed;
         }
@@ -260,14 +305,14 @@ pub const LuaEngine = struct {
         }
         
         // Call function
-        lua_context.wrapper.call(@intCast(args.len), 1) catch |err| {
+        wrapper.call(@intCast(args.len), 1) catch |err| {
             lua_context.setError(.execution_error, "Function call failed");
             return err;
         };
         
         // Convert result
         const result = try luaValueToScriptValue(lua_context, -1);
-        lua_context.wrapper.pop(1);
+        wrapper.pop(1);
         
         return result;
     }
@@ -275,25 +320,27 @@ pub const LuaEngine = struct {
     fn registerModule(context: *ScriptContext, module: *const ScriptModule) anyerror!void {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
+        const wrapper = lua_context.getWrapper();
+        
         // Create module table
-        lua_context.wrapper.createTable(0, @intCast(module.functions.len + module.constants.len));
+        wrapper.createTable(0, @intCast(module.functions.len + module.constants.len));
         
         // Register functions
         for (module.functions) |func_def| {
             // TODO: Create C function wrapper that calls the Zig callback
             // For now, just create a placeholder
-            lua_context.wrapper.pushNil();
-            try lua_context.wrapper.setField(-2, func_def.name);
+            wrapper.pushNil();
+            try wrapper.setField(-2, func_def.name);
         }
         
         // Register constants
         for (module.constants) |const_def| {
             try scriptValueToLuaValue(lua_context, const_def.value);
-            try lua_context.wrapper.setField(-2, const_def.name);
+            try wrapper.setField(-2, const_def.name);
         }
         
         // Store module in global table
-        try lua_context.wrapper.setGlobal(module.name);
+        try wrapper.setGlobal(module.name);
     }
     
     fn importModule(context: *ScriptContext, module_name: []const u8) anyerror!void {
@@ -301,27 +348,31 @@ pub const LuaEngine = struct {
         // For now, just check if the module exists
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
-        try lua_context.wrapper.getGlobal(module_name);
-        if (lua_context.wrapper.isNil(-1)) {
-            lua_context.wrapper.pop(1);
+        const wrapper = lua_context.getWrapper();
+        
+        try wrapper.getGlobal(module_name);
+        if (wrapper.isNil(-1)) {
+            wrapper.pop(1);
             lua_context.setError(.execution_error, "Module not found");
             return LuaEngineError.ModuleRegistrationFailed;
         }
-        lua_context.wrapper.pop(1);
+        wrapper.pop(1);
     }
     
     fn setGlobal(context: *ScriptContext, name: []const u8, value: ScriptValue) anyerror!void {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
         try scriptValueToLuaValue(lua_context, value);
-        try lua_context.wrapper.setGlobal(name);
+        try lua_context.getWrapper().setGlobal(name);
     }
     
     fn getGlobal(context: *ScriptContext, name: []const u8) anyerror!ScriptValue {
         const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
         
-        try lua_context.wrapper.getGlobal(name);
-        defer lua_context.wrapper.pop(1);
+        const wrapper = lua_context.getWrapper();
+        
+        try wrapper.getGlobal(name);
+        defer wrapper.pop(1);
         
         return try luaValueToScriptValue(lua_context, -1);
     }
@@ -338,18 +389,12 @@ pub const LuaEngine = struct {
     
     fn collectGarbage(context: *ScriptContext) void {
         const lua_context = getLuaContext(context) orelse return;
-        if (lua.lua_enabled) {
-            _ = lua.c.lua_gc(lua_context.wrapper.state, lua.c.LUA_GCCOLLECT, 0);
-        }
+        lua_context.collectGarbage();
     }
     
     fn getMemoryUsage(context: *ScriptContext) usize {
         const lua_context = getLuaContext(context) orelse return 0;
-        if (lua.lua_enabled) {
-            return @intCast(lua.c.lua_gc(lua_context.wrapper.state, lua.c.LUA_GCCOUNT, 0) * 1024 +
-                           lua.c.lua_gc(lua_context.wrapper.state, lua.c.LUA_GCCOUNTB, 0));
-        }
-        return 0;
+        return lua_context.getMemoryUsage();
     }
     
     // Helper functions
@@ -358,57 +403,59 @@ pub const LuaEngine = struct {
     }
     
     fn scriptValueToLuaValue(lua_context: *LuaContext, value: ScriptValue) !void {
+        const wrapper = lua_context.getWrapper();
         switch (value) {
-            .nil => lua_context.wrapper.pushNil(),
-            .boolean => |b| lua_context.wrapper.pushBoolean(b),
-            .integer => |i| lua_context.wrapper.pushInteger(@intCast(i)),
-            .float => |f| lua_context.wrapper.pushNumber(f),
-            .string => |s| try lua_context.wrapper.pushString(s),
+            .nil => wrapper.pushNil(),
+            .boolean => |b| wrapper.pushBoolean(b),
+            .integer => |i| wrapper.pushInteger(@intCast(i)),
+            .float => |f| wrapper.pushNumber(f),
+            .string => |s| try wrapper.pushString(s),
             .array => |arr| {
-                lua_context.wrapper.createTable(@intCast(arr.len), 0);
+                wrapper.createTable(@intCast(arr.len), 0);
                 for (arr, 1..) |item, i| {
                     try scriptValueToLuaValue(lua_context, item);
-                    lua_context.wrapper.pushInteger(@intCast(i));
-                    lua_context.wrapper.setTable(-3);
+                    wrapper.pushInteger(@intCast(i));
+                    wrapper.setTable(-3);
                 }
             },
             .object => |obj| {
-                lua_context.wrapper.createTable(0, @intCast(obj.count()));
+                wrapper.createTable(0, @intCast(obj.count()));
                 var iterator = obj.iterator();
                 while (iterator.next()) |entry| {
-                    try lua_context.wrapper.pushString(entry.key_ptr.*);
+                    try wrapper.pushString(entry.key_ptr.*);
                     try scriptValueToLuaValue(lua_context, entry.value_ptr.*);
-                    lua_context.wrapper.setTable(-3);
+                    wrapper.setTable(-3);
                 }
             },
             .function => {
                 // TODO: Implement function reference handling
-                lua_context.wrapper.pushNil();
+                wrapper.pushNil();
             },
             .userdata => {
                 // TODO: Implement userdata handling
-                lua_context.wrapper.pushNil();
+                wrapper.pushNil();
             },
         }
     }
     
     fn luaValueToScriptValue(lua_context: *LuaContext, index: i32) !ScriptValue {
-        const lua_type = lua_context.wrapper.getType(index);
+        const wrapper = lua_context.getWrapper();
+        const lua_type = wrapper.getType(index);
         
         return switch (lua_type) {
             lua.LUA_TNIL => ScriptValue.nil,
-            lua.LUA_TBOOLEAN => ScriptValue{ .boolean = lua_context.wrapper.toBoolean(index) },
+            lua.LUA_TBOOLEAN => ScriptValue{ .boolean = wrapper.toBoolean(index) },
             lua.LUA_TNUMBER => blk: {
-                if (lua_context.wrapper.toInteger(index)) |int_val| {
+                if (wrapper.toInteger(index)) |int_val| {
                     break :blk ScriptValue{ .integer = @intCast(int_val) };
-                } else if (lua_context.wrapper.toNumber(index)) |num_val| {
+                } else if (wrapper.toNumber(index)) |num_val| {
                     break :blk ScriptValue{ .float = num_val };
                 } else {
                     break :blk ScriptValue.nil;
                 }
             },
             lua.LUA_TSTRING => blk: {
-                const str = try lua_context.wrapper.toString(index);
+                const str = try wrapper.toString(index);
                 const str_copy = try lua_context.allocator.dupe(u8, str);
                 break :blk ScriptValue{ .string = str_copy };
             },
@@ -423,6 +470,33 @@ pub const LuaEngine = struct {
             },
             else => ScriptValue.nil,
         };
+    }
+    
+    // Lifecycle management methods
+    pub fn createSnapshot(self: *Self, context: *ScriptContext) !void {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
+        try lua_context.createSnapshot();
+    }
+    
+    pub fn restoreSnapshot(self: *Self, context: *ScriptContext, index: usize) !void {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
+        try lua_context.restoreSnapshot(index);
+    }
+    
+    pub fn cleanupIdleStates(self: *Self) void {
+        self.state_pool.cleanup();
+    }
+    
+    pub fn getPoolStats(self: *Self) LuaStatePool.PoolStats {
+        return self.state_pool.getStats();
+    }
+    
+    pub fn getContextStats(self: *Self, context: *ScriptContext) ?StateStats {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return null;
+        return lua_context.managed_state.getStats();
     }
 };
 

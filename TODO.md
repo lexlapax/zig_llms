@@ -34,10 +34,10 @@
    20.4. [✅] Plan coroutine integration for async operations
    20.5. [✅] Design security sandboxing approach
    20.6. [✅] Create detailed implementation roadmap
-   20.7. [ ] Research Lua bytecode validation and security implications
-   20.8. [ ] Investigate Lua 5.4 warning system integration
-   20.9. [ ] Study Lua 5.4 generational GC vs incremental GC trade-offs
-   20.10. [ ] Research Lua debug introspection capabilities for development tools
+   20.7. [✅] Research Lua bytecode validation and security implications
+   20.8. [✅] Investigate Lua 5.4 warning system integration
+   20.9. [✅] Study Lua 5.4 generational GC vs incremental GC trade-offs
+   20.10. [✅] Research Lua debug introspection capabilities for development tools
 
 ### 21. Lua Core Integration
    21.1. [ ] Set up Lua library dependencies in build.zig

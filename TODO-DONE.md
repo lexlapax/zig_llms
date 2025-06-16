@@ -717,3 +717,16 @@
   - HTTP and gRPC endpoint support
   - ExternalToolBuilder for fluent configuration
   - Multiple execution strategies for different tool types
+
+## Phase 10: Lua Scripting Engine (Weeks 16-18) - In Progress
+
+### 21. Lua Core Integration - In Progress
+- [x] 21.4. Add Zig allocator integration with Lua memory management - Completed 2025-06-16
+  - Created lua_allocator.zig with custom memory allocator
+  - Implemented LuaAllocatorContext for tracking and limits
+  - Added luaAllocFunction C callback for Lua integration
+  - Memory limit enforcement with detailed statistics
+  - Debug mode with allocation tracking
+  - Integration with LuaWrapper via initWithCustomAllocator
+  - Modified ManagedLuaState to use custom allocator
+  - Created comprehensive tests and examples

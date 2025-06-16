@@ -41,6 +41,23 @@ pub const LUA_TFUNCTION = 6;
 pub const LUA_TUSERDATA = 7;
 pub const LUA_TTHREAD = 8;
 
+// Garbage collection options
+pub const LUA_GCSTOP = 0;
+pub const LUA_GCRESTART = 1;
+pub const LUA_GCCOLLECT = 2;
+pub const LUA_GCCOUNT = 3;
+pub const LUA_GCCOUNTB = 4;
+pub const LUA_GCSTEP = 5;
+pub const LUA_GCSETPAUSE = 6;
+pub const LUA_GCSETSTEPMUL = 7;
+pub const LUA_GCISRUNNING = 9;
+pub const LUA_GCGEN = 10;
+pub const LUA_GCINC = 11;
+
+// Registry and globals indices
+pub const LUA_REGISTRYINDEX = -10000;
+pub const LUA_GLOBALSINDEX = -10002;
+
 // Type aliases for cleaner Zig code
 pub const LuaState = if (lua_enabled) *c.lua_State else *c.lua_State;
 pub const LuaNumber = c.lua_Number;
@@ -74,6 +91,7 @@ pub const LuaWrapper = struct {
     state: LuaState,
     allocator: std.mem.Allocator,
     owns_state: bool,
+    uses_custom_allocator: bool,
 
     pub fn init(allocator: std.mem.Allocator) !*LuaWrapper {
         if (!lua_enabled) {
@@ -90,6 +108,33 @@ pub const LuaWrapper = struct {
             .state = state,
             .allocator = allocator,
             .owns_state = true,
+            .uses_custom_allocator = false,
+        };
+
+        // Open standard libraries
+        c.luaL_openlibs(state);
+
+        return self;
+    }
+    
+    pub fn initWithCustomAllocator(allocator: std.mem.Allocator, memory_limit: usize, debug_mode: bool) !*LuaWrapper {
+        if (!lua_enabled) {
+            return error.LuaNotEnabled;
+        }
+        
+        const lua_allocator = @import("../../scripting/engines/lua_allocator.zig");
+        
+        const self = try allocator.create(LuaWrapper);
+        errdefer allocator.destroy(self);
+
+        const state = try lua_allocator.createLuaStateWithAllocator(allocator, memory_limit, debug_mode);
+        errdefer lua_allocator.closeLuaStateWithAllocator(state);
+
+        self.* = LuaWrapper{
+            .state = state,
+            .allocator = allocator,
+            .owns_state = true,
+            .uses_custom_allocator = true,
         };
 
         // Open standard libraries
@@ -114,7 +159,12 @@ pub const LuaWrapper = struct {
 
     pub fn deinit(self: *LuaWrapper) void {
         if (self.owns_state and lua_enabled) {
-            c.lua_close(self.state);
+            if (self.uses_custom_allocator) {
+                const lua_allocator = @import("../../scripting/engines/lua_allocator.zig");
+                lua_allocator.closeLuaStateWithAllocator(self.state);
+            } else {
+                c.lua_close(self.state);
+            }
         }
         self.allocator.destroy(self);
     }
@@ -332,6 +382,17 @@ pub const LuaWrapper = struct {
     pub fn unref(self: *LuaWrapper, table: c_int, reference: c_int) void {
         if (!lua_enabled) return;
         c.luaL_unref(self.state, table, reference);
+    }
+    
+    // Get memory allocation statistics (only available with custom allocator)
+    pub fn getAllocationStats(self: *LuaWrapper) ?@import("../../scripting/engines/lua_allocator.zig").AllocationStats {
+        if (!lua_enabled or !self.uses_custom_allocator) return null;
+        
+        const lua_allocator = @import("../../scripting/engines/lua_allocator.zig");
+        if (lua_allocator.getAllocatorContext(self.state)) |context| {
+            return context.getStats();
+        }
+        return null;
     }
 };
 

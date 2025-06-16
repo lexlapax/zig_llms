@@ -154,7 +154,15 @@ pub const ManagedLuaState = struct {
         const self = try allocator.create(Self);
         errdefer allocator.destroy(self);
 
-        const wrapper = try lua.LuaWrapper.init(allocator);
+        // Create wrapper with custom allocator if memory limit is set
+        const wrapper = if (config.max_memory_bytes > 0)
+            try lua.LuaWrapper.initWithCustomAllocator(
+                allocator,
+                config.max_memory_bytes,
+                config.enable_debugging,
+            )
+        else
+            try lua.LuaWrapper.init(allocator);
         errdefer wrapper.deinit();
 
         self.* = Self{
@@ -273,8 +281,11 @@ pub const ManagedLuaState = struct {
 
         // Set GC parameters based on config
         if (self.config.max_memory_bytes > 0) {
+            // Set garbage collection threshold based on memory limit
+            // The GC will run more aggressively as we approach the memory limit
             const kb_limit = @as(c_int, @intCast(self.config.max_memory_bytes / 1024));
-            _ = lua.c.lua_gc(self.state, lua.c.LUA_GCKEYWORD, kb_limit);
+            _ = lua.c.lua_gc(self.state, lua.c.LUA_GCSETPAUSE, @divFloor(kb_limit, 10));
+            _ = lua.c.lua_gc(self.state, lua.c.LUA_GCSETSTEPMUL, 200);
         }
     }
 
@@ -397,9 +408,22 @@ pub const ManagedLuaState = struct {
         
         if (!lua.lua_enabled) return 0;
         
-        const count_kb = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNT, 0);
-        const count_b = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNTB, 0);
+        // If using custom allocator, get precise stats
+        if (self.wrapper.getAllocationStats()) |stats| {
+            return stats.total_allocated;
+        }
+        
+        // Fallback to Lua GC stats
+        const count_kb = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNT, @as(c_int, 0));
+        const count_b = lua.c.lua_gc(self.state, lua.c.LUA_GCCOUNTB, @as(c_int, 0));
         return @as(usize, @intCast(count_kb)) * 1024 + @as(usize, @intCast(count_b));
+    }
+    
+    pub fn getAllocationStats(self: *Self) ?@import("lua_allocator.zig").AllocationStats {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        
+        return self.wrapper.getAllocationStats();
     }
 
     pub fn collectGarbage(self: *Self) void {

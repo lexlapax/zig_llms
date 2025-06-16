@@ -121,6 +121,20 @@ pub fn build(b: *std.Build) void {
         const run_lua_lifecycle = b.addRunArtifact(lua_lifecycle_example);
         const run_lua_lifecycle_step = b.step("run-lua-lifecycle", "Run the Lua lifecycle management demo");
         run_lua_lifecycle_step.dependOn(&run_lua_lifecycle.step);
+        
+        // Add Lua memory demo
+        const lua_memory_example = b.addExecutable(.{
+            .name = "lua_memory_demo",
+            .root_source_file = b.path("examples/lua_memory_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        lua_memory_example.root_module.addImport("zig_llms", lib.root_module);
+        lua_memory_example.linkLibrary(lib);
+        
+        const run_lua_memory = b.addRunArtifact(lua_memory_example);
+        const run_lua_memory_step = b.step("run-lua-memory", "Run the Lua memory management demo");
+        run_lua_memory_step.dependOn(&run_lua_memory.step);
     }
 }
 

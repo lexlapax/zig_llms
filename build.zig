@@ -193,6 +193,21 @@ pub fn build(b: *std.Build) void {
         const run_lua_struct_serialization = b.addRunArtifact(lua_struct_serialization_example);
         const run_lua_struct_serialization_step = b.step("run-lua-struct-serialization", "Run the Lua struct serialization demo");
         run_lua_struct_serialization_step.dependOn(&run_lua_struct_serialization.step);
+
+        // Add Lua API bridge demo
+        const lua_api_bridge_example = b.addExecutable(.{
+            .name = "lua_api_bridge_demo",
+            .root_source_file = b.path("examples/lua_api_bridge_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        lua_api_bridge_example.root_module.addImport("zig_llms", lib.root_module);
+        lua_api_bridge_example.linkLibrary(lib);
+        
+        const run_lua_api_bridge = b.addRunArtifact(lua_api_bridge_example);
+        const run_lua_api_bridge_step = b.step("run-lua-api-bridge", "Run the comprehensive Lua API bridge demo");
+        run_lua_api_bridge_step.dependOn(&run_lua_api_bridge.step);
     }
 }
 

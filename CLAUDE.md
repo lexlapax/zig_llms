@@ -96,15 +96,15 @@ zig_llms is a lightweight LLM agent framework inspired by go-llms and Google's A
   - Hook Bridge: Registration, execution, filtering, composition
   - Output Bridge: Parsing, recovery, format detection, validation
 
-### 🚧 Phase 10: Lua Scripting Engine (60% Complete)
-**Current Status**: Task 22 (Lua Type System and Value Bridge) completed - All 11 subtasks finished
-**Next Task**: 23.1 - Create Lua C function wrappers for Agent Bridge
+### 🚧 Phase 10: Lua Scripting Engine (In Progress)
+**Current Status**: Task 23 completed - Lua API Bridge Integration (all 14 subtasks finished)
+**Next Task**: 24.1 - Implement coroutine support for async operations
 
 **Progress**: 
 - ✅ 20.1-20.10: All research and planning tasks completed (comprehensive documentation)
 - ✅ 21.1-21.10: All core integration tasks completed (state management, memory, execution, pooling, snapshots, panic handling)
 - ✅ 22.1-22.11: All type system and value bridge tasks completed (bidirectional conversion, advanced type support)
-- 🔄 23.1: Create Lua C function wrappers for Agent Bridge (ready to start)
+- ✅ 23.1-23.14: All API bridge integration tasks completed (all 10 bridges with optimization)
 
 **Major Completed Systems**:
 - **Lua Engine Core**: Complete ScriptingEngine implementation with lifecycle management

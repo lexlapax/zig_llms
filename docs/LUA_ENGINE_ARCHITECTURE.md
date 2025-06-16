@@ -1044,70 +1044,96 @@ pub fn createDevelopmentLuaEngine(allocator: std.mem.Allocator) !*LuaEngine {
 
 ## API Bridge Integration
 
-### Unified API Bridge System
+### Unified API Bridge System ✅ COMPLETED
+
+The Lua API Bridge system has been fully implemented, providing comprehensive access to all zig_llms functionality through Lua scripts.
 
 ```zig
 pub const LuaAPIBridge = struct {
     const Self = @This();
     
     allocator: std.mem.Allocator,
-    bridges: std.StringHashMap(*APIBridge),
+    registered_bridges: std.StringHashMap(BridgeInfo),
+    optimization_config: OptimizationConfig,
+    metrics: BridgeMetrics,
     
-    pub fn init(allocator: std.mem.Allocator, api_bridges: APIBridges) !*Self {
-        const self = try allocator.create(Self);
-        self.allocator = allocator;
-        self.bridges = std.StringHashMap(*APIBridge).init(allocator);
-        
-        // Register all bridges
-        try self.bridges.put("agent", api_bridges.agent_bridge);
-        try self.bridges.put("tool", api_bridges.tool_bridge);
-        try self.bridges.put("workflow", api_bridges.workflow_bridge);
-        try self.bridges.put("provider", api_bridges.provider_bridge);
-        try self.bridges.put("event", api_bridges.event_bridge);
-        try self.bridges.put("test", api_bridges.test_bridge);
-        try self.bridges.put("schema", api_bridges.schema_bridge);
-        try self.bridges.put("memory", api_bridges.memory_bridge);
-        try self.bridges.put("hook", api_bridges.hook_bridge);
-        try self.bridges.put("output", api_bridges.output_bridge);
-        
-        return self;
-    }
+    // Optimization components
+    batch_optimizer: ?*LuaBatchOptimizer = null,
+    stack_optimizer: ?*LuaStackOptimizer = null,
     
-    pub fn registerAPIs(self: *Self, L: *c.lua_State) !void {
-        // Create zigllms global table
-        c.lua_newtable(L);
+    pub fn registerAllBridges(self: *Self, wrapper: *LuaWrapper, context: *ScriptContext) !void {
+        // Register all 10 API bridges
+        try agent_bridge.register(wrapper, context);
+        try tool_bridge.register(wrapper, context);
+        try workflow_bridge.register(wrapper, context);
+        try provider_bridge.register(wrapper, context);
+        try event_bridge.register(wrapper, context);
+        try test_bridge.register(wrapper, context);
+        try schema_bridge.register(wrapper, context);
+        try memory_bridge.register(wrapper, context);
+        try hook_bridge.register(wrapper, context);
+        try output_bridge.register(wrapper, context);
         
-        // Register each bridge
-        var iter = self.bridges.iterator();
-        while (iter.next()) |entry| {
-            const bridge_name = entry.key_ptr.*;
-            const bridge = entry.value_ptr.*;
-            
-            // Create module table
-            c.lua_newtable(L);
-            
-            // Register functions
-            try self.registerBridgeFunctions(L, bridge);
-            
-            // Set as zigllms.module
-            c.lua_setfield(L, -2, bridge_name.ptr);
+        // Register optimization features if enabled
+        if (self.optimization_config.batch_optimization) {
+            self.batch_optimizer = try LuaBatchOptimizer.init(self.allocator, self.optimization_config.batch_config);
         }
         
-        c.lua_setglobal(L, "zigllms");
-    }
-    
-    fn registerBridgeFunctions(self: *Self, L: *c.lua_State, bridge: *APIBridge) !void {
-        const functions = try bridge.getFunctions();
-        
-        for (functions) |func| {
-            // Create wrapper function
-            const wrapper = try self.createLuaWrapper(func);
-            c.lua_pushcfunction(L, wrapper);
-            c.lua_setfield(L, -2, func.name.ptr);
+        if (self.optimization_config.stack_optimization) {
+            self.stack_optimizer = try LuaStackOptimizer.init(self.allocator);
         }
     }
 };
 ```
+
+### Implemented API Bridge Components
+
+Each bridge provides Lua C function wrappers for its specific domain:
+
+1. **Agent Bridge** (`lua_bridges/agent_bridge.zig`) - 8 functions
+   - `create`, `destroy`, `run`, `configure`, `get_state`, `get_info`, `list`, `reset`
+
+2. **Tool Bridge** (`lua_bridges/tool_bridge.zig`) - 10 functions
+   - `register`, `unregister`, `execute`, `discover`, `list`, `get`, `exists`, `validate`, `get_schema`, `get_info`
+
+3. **Workflow Bridge** (`lua_bridges/workflow_bridge.zig`) - 12 functions
+   - `create`, `execute`, `pause`, `resume`, `cancel`, `get_status`, `get_result`, `list`, `get`, `compose`, `validate`, `get_dependencies`
+
+4. **Provider Bridge** (`lua_bridges/provider_bridge.zig`) - 8 functions
+   - `chat`, `configure`, `list`, `get`, `create`, `destroy`, `stream`, `get_models`
+
+5. **Event Bridge** (`lua_bridges/event_bridge.zig`) - 8 functions
+   - `emit`, `subscribe`, `unsubscribe`, `list_subscriptions`, `filter`, `record`, `replay`, `clear`
+
+6. **Test Bridge** (`lua_bridges/test_bridge.zig`) - 8 functions
+   - `create_scenario`, `run_scenario`, `assert_equals`, `assert_contains`, `create_mock`, `setup_fixture`, `run_suite`, `get_coverage`
+
+7. **Schema Bridge** (`lua_bridges/schema_bridge.zig`) - 8 functions
+   - `validate`, `generate`, `coerce`, `extract`, `merge`, `create`, `compile`, `get_info`
+
+8. **Memory Bridge** (`lua_bridges/memory_bridge.zig`) - 8 functions
+   - `store`, `retrieve`, `delete`, `list_keys`, `clear`, `get_stats`, `persist`, `load`
+
+9. **Hook Bridge** (`lua_bridges/hook_bridge.zig`) - 8 functions
+   - `register`, `unregister`, `execute`, `list`, `enable`, `disable`, `get_info`, `compose`
+
+10. **Output Bridge** (`lua_bridges/output_bridge.zig`) - 8 functions
+    - `parse`, `format`, `detect_format`, `validate_format`, `extract_json`, `extract_markdown`, `recover`, `get_schema`
+
+### Performance Optimization Features
+
+#### Batch Optimizer (`lua_batch_optimizer.zig`)
+- Batches multiple API calls for efficient execution
+- Configurable batch size and timeout
+- Memoization cache with TTL
+- LRU/LFU/FIFO eviction policies
+- Performance metrics collection
+
+#### Stack Optimizer (`lua_stack_optimizer.zig`)
+- Pre-sizes Lua stack based on function signatures
+- Adaptive learning from actual usage
+- Reduces stack reallocation overhead
+- Function signature database
 
 ### Example API Usage in Lua
 
@@ -1123,14 +1149,65 @@ local agent = zigllms.agent.create({
 local response = zigllms.agent.run(agent, "Hello, how are you?")
 print(response.content)
 
--- Tool API
-local file_tool = zigllms.tool.get("file_operations")
-local result = zigllms.tool.execute(file_tool, {
-    operation = "read",
-    path = "config.json"
+-- Tool API with constants
+local tool_id = zigllms.tool.register({
+    name = "calculator",
+    category = zigllms.tool.Category.DATA,
+    execution_mode = zigllms.tool.ExecutionMode.DIRECT,
+    execute = function(input)
+        return eval(input.expression)
+    end
 })
 
--- Async workflow
+-- Workflow API with patterns
+local workflow = zigllms.workflow.create({
+    name = "data_pipeline",
+    pattern = zigllms.workflow.Pattern.SEQUENTIAL,
+    steps = {
+        {type = "agent_call", agent = agent},
+        {type = "tool_call", tool = tool_id}
+    }
+})
+
+-- Event subscription with priorities
+zigllms.event.subscribe("workflow.*", function(event)
+    print("Event:", event.type, "Priority:", event.priority)
+end)
+
+-- Schema validation
+local validation_result = zigllms.schema.validate(data, {
+    type = zigllms.schema.Type.OBJECT,
+    properties = {
+        name = {type = zigllms.schema.Type.STRING},
+        age = {type = zigllms.schema.Type.NUMBER}
+    }
+})
+
+-- Memory with scopes
+zigllms.memory.store("config", config_data, {
+    scope = zigllms.memory.Scope.GLOBAL,
+    type = zigllms.memory.Type.PERSISTENT
+})
+
+-- Hook registration with priorities
+zigllms.hook.register("agent_before_run", function(context)
+    print("Agent about to run:", context.agent_id)
+end, {
+    type = zigllms.hook.Type.PRE,
+    priority = zigllms.hook.Priority.HIGH
+})
+
+-- Output parsing with recovery
+local parsed = zigllms.output.parse(raw_output, {
+    format = zigllms.output.Format.JSON,
+    recovery = zigllms.output.Recovery.LENIENT
+})
+
+-- Test assertions
+zigllms.test.assert_equals(actual, expected, "Values should match")
+zigllms.test.assert_contains(haystack, needle, "Should contain substring")
+
+-- Async workflow (when coroutines are implemented)
 local workflow = async(function()
     local data = await(zigllms.provider.chat({
         messages = { { role = "user", content = "Generate a story" } }

@@ -969,6 +969,127 @@
   - RegistrationUtils for simplified type registration with migration support
   - Comprehensive demo showing type evolution, migration, and validation scenarios
 
+### 23. Lua API Bridge Integration - COMPLETED 2025-06-16
+
+- [x] 23.1. Create Lua C function wrappers for Agent Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/agent_bridge.zig
+  - Implemented 8 agent functions: create, destroy, run, configure, get_state, get_info, list, reset
+  - Added agent state constants and error handling
+  - Full integration with LuaAPIBridge for context management
+  
+- [x] 23.2. Create Lua C function wrappers for Tool Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/tool_bridge.zig
+  - Implemented 10 tool functions: register, unregister, execute, discover, list, get, exists, validate, get_schema, get_info
+  - Added tool execution modes and category constants
+  - Comprehensive error handling and argument validation
+  
+- [x] 23.3. Create Lua C function wrappers for Workflow Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/workflow_bridge.zig
+  - Implemented 12 workflow functions: create, execute, pause, resume, cancel, get_status, get_result, list, get, compose, validate, get_dependencies
+  - Added workflow status and pattern constants
+  - Support for workflow composition and dependency tracking
+  
+- [x] 23.4. Create Lua C function wrappers for Provider Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/provider_bridge.zig
+  - Implemented 8 provider functions: chat, configure, list, get, create, destroy, stream, get_models
+  - Added provider type and status constants
+  - Support for streaming responses with callbacks
+  
+- [x] 23.5. Create Lua C function wrappers for Event Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/event_bridge.zig
+  - Implemented 8 event functions: emit, subscribe, unsubscribe, list_subscriptions, filter, record, replay, clear
+  - Added event type and priority constants
+  - Support for event filtering and recording
+  
+- [x] 23.6. Create Lua C function wrappers for Test Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/test_bridge.zig
+  - Implemented 8 test functions: create_scenario, run_scenario, assert_equals, assert_contains, create_mock, setup_fixture, run_suite, get_coverage
+  - Added assert type and mock type constants
+  - Full integration with testing framework
+  
+- [x] 23.7. Create Lua C function wrappers for Schema Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/schema_bridge.zig
+  - Implemented 8 schema functions: validate, generate, coerce, extract, merge, create, compile, get_info
+  - Added schema type and format constants
+  - Support for JSON schema operations
+  
+- [x] 23.8. Create Lua C function wrappers for Memory Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/memory_bridge.zig
+  - Implemented 8 memory functions: store, retrieve, delete, list_keys, clear, get_stats, persist, load
+  - Added memory type and scope constants
+  - Support for conversation history and persistence
+  
+- [x] 23.9. Create Lua C function wrappers for Hook Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/hook_bridge.zig
+  - Implemented 8 hook functions: register, unregister, execute, list, enable, disable, get_info, compose
+  - Added hook type and priority constants
+  - Support for hook composition and filtering
+  
+- [x] 23.10. Create Lua C function wrappers for Output Bridge - Completed 2025-06-16
+  - Created src/scripting/engines/lua_bridges/output_bridge.zig
+  - Implemented 8 output functions: parse, format, detect_format, validate_format, extract_json, extract_markdown, recover, get_schema
+  - Added format and recovery constants
+  - Support for multiple output formats
+  
+- [x] 23.11. Create batched API call optimization layer - Completed 2025-06-16
+  - Created src/scripting/engines/lua_batch_optimizer.zig
+  - Implemented LuaBatchOptimizer with configurable batching
+  - Added function call memoization with cache management
+  - Support for call priorities and batch timeouts
+  - Integrated profiling and metrics collection
+  
+- [x] 23.12. Implement stack pre-sizing strategies - Completed 2025-06-16
+  - Created src/scripting/engines/lua_stack_optimizer.zig
+  - Implemented LuaStackOptimizer with predictive sizing
+  - Added function signature database and learning system
+  - Support for adaptive stack management based on usage patterns
+  - Performance tracking and optimization statistics
+  
+- [x] 23.13. Add function call memoization for frequently used bridges - Completed 2025-06-16
+  - Integrated into LuaBatchOptimizer as part of task 23.11
+  - Cache system with configurable TTL and eviction policies
+  - Support for LRU, LFU, and size-based eviction
+  - Thread-safe cache operations with mutex protection
+  
+- [x] 23.14. Create bridge call profiling and metrics collection - Completed 2025-06-16
+  - Integrated into both LuaBatchOptimizer and LuaStackOptimizer
+  - Comprehensive metrics: call counts, execution times, cache hit rates
+  - Stack usage statistics and prediction accuracy
+  - Performance profiling with configurable sampling rates
+
+### Additional Implementation Details:
+
+- Created src/scripting/engines/lua_api_bridge.zig as the main coordinator
+  - LuaAPIBridge struct managing all 10 bridge registrations
+  - Centralized error handling and context management
+  - Stack pre-sizing integration for all bridge functions
+  - Metrics collection and performance tracking
+
+- Created scripts/generate_lua_bridges.py for efficient bridge generation
+  - Python script to generate remaining 7 bridges after manual creation of first 3
+  - Consistent structure and error handling across all bridges
+  - Automated constant registration and function mapping
+
+- Created examples/lua_api_bridge_demo.zig
+  - Comprehensive demonstration of all 10 API bridges
+  - Shows optimization features (batching, memoization, stack pre-sizing)
+  - Includes error handling and performance metrics examples
+  - Demonstrates cross-bridge integration scenarios
+
+- Updated build.zig with lua_api_bridge_demo target
+  - Added run-lua-api-bridge build step
+  - Linked with Lua library and zig_llms
+
+**Key Features Implemented:**
+- All 10 zig_llms API bridges fully exposed to Lua scripts
+- Comprehensive error handling with LuaAPIBridgeError
+- Performance optimizations: batching, memoization, stack pre-sizing
+- Thread-safe operations with proper mutex usage
+- Extensive constants for enums and configuration options
+- Full ScriptValue ↔ Lua value conversion for all bridge functions
+- Context management with ScriptContext integration
+- Metrics and profiling for performance monitoring
+
 - [x] 22.10. Create bidirectional weak reference system - Completed 2025-06-16
   - Created lua_weak_references.zig with comprehensive weak reference implementation
   - LuaWeakRef for Lua-to-Zig weak references using LUA_REGISTRYINDEX storage

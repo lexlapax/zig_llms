@@ -11,3 +11,8 @@ zig-out
 
 ,DS_Store
 src/.DS_Store
+
+# Downloaded dependencies
+deps/lua-*
+deps/*.tar.gz
+deps/*.zip

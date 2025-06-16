@@ -7,12 +7,40 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Build options
+    const enable_lua = b.option(bool, "enable-lua", "Enable Lua scripting engine support") orelse true;
+    const lua_jit = b.option(bool, "lua-jit", "Use LuaJIT instead of standard Lua") orelse false;
+
+    // Create a separate Lua static library if enabled
+    var lua_lib: ?*std.Build.Step.Compile = null;
+    if (enable_lua) {
+        if (lua_jit) {
+            // LuaJIT configuration (for future implementation)
+            @panic("LuaJIT support not yet implemented");
+        } else {
+            // Build Lua as a separate static library
+            lua_lib = buildLuaLib(b, target, optimize);
+        }
+    }
+
     const lib = b.addStaticLibrary(.{
         .name = "zig_llms",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    // Add build options to the library
+    const options = b.addOptions();
+    options.addOption(bool, "enable_lua", enable_lua);
+    options.addOption(bool, "lua_jit", lua_jit);
+    lib.root_module.addOptions("build_options", options);
+
+    // Link Lua if enabled
+    if (lua_lib) |lua| {
+        lib.linkLibrary(lua);
+        lib.addIncludePath(b.path("deps/lua-5.4.6/src"));
+    }
 
     b.installArtifact(lib);
 
@@ -53,8 +81,129 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     
+    // Link with Lua if enabled
+    if (lua_lib) |lua| {
+        main_tests.linkLibrary(lua);
+        main_tests.addIncludePath(b.path("deps/lua-5.4.6/src"));
+    }
+    main_tests.root_module.addOptions("build_options", options);
+    
     const run_main_tests = b.addRunArtifact(main_tests);
     
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_main_tests.step);
+    
+    // Lua-specific examples if enabled
+    if (enable_lua) {
+        const lua_example = b.addExecutable(.{
+            .name = "lua_example",
+            .root_source_file = b.path("examples/lua/basic_lua_script.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        lua_example.root_module.addImport("zig_llms", lib.root_module);
+        lua_example.linkLibrary(lib);
+        
+        const run_lua_example = b.addRunArtifact(lua_example);
+        const run_lua_step = b.step("run-lua-example", "Run the Lua scripting example");
+        run_lua_step.dependOn(&run_lua_example.step);
+    }
+}
+
+fn buildLuaLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    const lua_lib = b.addStaticLibrary(.{
+        .name = "lua",
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    // Determine Lua source location
+    const lua_src_path = "deps/lua-5.4.6/src";
+    
+    // Add Lua include directory
+    lua_lib.addIncludePath(b.path(lua_src_path));
+    
+    // Define Lua configuration based on target
+    const target_info = target.result;
+    
+    // Platform-specific defines
+    switch (target_info.os.tag) {
+        .linux => {
+            lua_lib.root_module.addCMacro("LUA_USE_LINUX", "");
+            lua_lib.root_module.addCMacro("LUA_USE_POSIX", "");
+            lua_lib.root_module.addCMacro("LUA_USE_DLOPEN", "");
+            lua_lib.linkSystemLibrary("m");
+            lua_lib.linkSystemLibrary("dl");
+        },
+        .macos => {
+            lua_lib.root_module.addCMacro("LUA_USE_MACOSX", "");
+            lua_lib.root_module.addCMacro("LUA_USE_POSIX", "");
+            lua_lib.root_module.addCMacro("LUA_USE_DLOPEN", "");
+        },
+        .windows => {
+            lua_lib.root_module.addCMacro("LUA_BUILD_AS_DLL", "");
+        },
+        else => {
+            // Generic POSIX
+            lua_lib.root_module.addCMacro("LUA_USE_POSIX", "");
+        },
+    }
+    
+    // Common Lua defines
+    lua_lib.root_module.addCMacro("LUA_COMPAT_5_3", ""); // Compatibility with Lua 5.3
+    
+    // Add Lua C source files
+    const lua_sources = [_][]const u8{
+        "lapi.c",
+        "lauxlib.c",
+        "lbaselib.c",
+        "lcode.c",
+        "lcorolib.c",
+        "lctype.c",
+        "ldblib.c",
+        "ldebug.c",
+        "ldo.c",
+        "ldump.c",
+        "lfunc.c",
+        "lgc.c",
+        "linit.c",
+        "liolib.c",
+        "llex.c",
+        "lmathlib.c",
+        "lmem.c",
+        "loadlib.c",
+        "lobject.c",
+        "lopcodes.c",
+        "loslib.c",
+        "lparser.c",
+        "lstate.c",
+        "lstring.c",
+        "lstrlib.c",
+        "ltable.c",
+        "ltablib.c",
+        "ltm.c",
+        "lundump.c",
+        "lutf8lib.c",
+        "lvm.c",
+        "lzio.c",
+    };
+    
+    for (lua_sources) |src| {
+        const src_path = b.fmt("{s}/{s}", .{ lua_src_path, src });
+        lua_lib.addCSourceFile(.{
+            .file = b.path(src_path),
+            .flags = &.{
+                "-std=c99",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-DLUA_COMPAT_5_3",
+            },
+        });
+    }
+    
+    // Link libc
+    lua_lib.linkLibC();
+    
+    return lua_lib;
 }

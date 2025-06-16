@@ -21,26 +21,12 @@
 
 ## ACTIVE PHASES
 
----
+## Phase 10: Lua Scripting Engine (Weeks 16-18) - 🚧 IN PROGRESS
 
-## PLANNED PHASES
+### 20. Lua Engine Research and Planning - ✅ COMPLETED (See TODO-DONE.md)
 
-## Phase 10: Lua Scripting Engine (Weeks 16-18)
-
-### 20. Lua Engine Research and Planning
-   20.1. [✅] Research Lua 5.4 C API integration with Zig and add additional TODO.md entries as needed
-   20.2. [✅] Analyze lua_State management and memory integration
-   20.3. [✅] Design ScriptValue ↔ Lua type conversion system
-   20.4. [✅] Plan coroutine integration for async operations
-   20.5. [✅] Design security sandboxing approach
-   20.6. [✅] Create detailed implementation roadmap
-   20.7. [✅] Research Lua bytecode validation and security implications
-   20.8. [✅] Investigate Lua 5.4 warning system integration
-   20.9. [✅] Study Lua 5.4 generational GC vs incremental GC trade-offs
-   20.10. [✅] Research Lua debug introspection capabilities for development tools
-
-### 21. Lua Core Integration
-   21.1. [ ] Set up Lua library dependencies in build.zig
+### 21. Lua Core Integration - 🚧 IN PROGRESS
+   21.1. [✅] Set up Lua library dependencies in build.zig
    21.2. [ ] Create LuaEngine struct implementing ScriptingEngine interface
    21.3. [ ] Implement lua_State lifecycle management
    21.4. [ ] Add Zig allocator integration with Lua memory management
@@ -361,10 +347,10 @@
   - ✅ Hook Bridge: Registration, execution, filtering, composition
   - ✅ Output Bridge: Parsing, recovery, format detection, validation
 
-**Language Engine Implementations: 0% Complete** 🚧
-- ⏳ Lua Engine (Phase 10) - Comprehensive embedding planned
+**Language Engine Implementations: 5% Complete** 🚧
+- 🚧 Lua Engine (Phase 10) - Dependency setup complete, core integration in progress
 - ⏳ QuickJS Engine (Phase 11) - Modern JavaScript with async support
 - ⏳ Wren Engine (Phase 12) - Fiber-based concurrency system
 - 🔮 Python Engine (Future) - CPython integration with GIL handling
 
-**Next Priority:** Begin Phase 10 (Lua Engine) implementation
+**Next Priority:** Continue Phase 10 (Lua Engine) core integration - task 21.2

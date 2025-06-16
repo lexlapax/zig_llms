@@ -60,9 +60,41 @@ install:
 	@echo "Installing zig_llms..."
 	zig build install
 
+# Lua setup
+setup-lua:
+	@echo "Setting up Lua dependencies..."
+	@./scripts/setup_lua.sh
+
+# Build with Lua support
+build-lua: setup-lua
+	@echo "Building zig_llms with Lua support..."
+	zig build -Denable-lua=true
+
+# Build without Lua support
+build-no-lua:
+	@echo "Building zig_llms without Lua support..."
+	zig build -Denable-lua=false
+
+# Run Lua example
+run-lua-example: build-lua
+	@echo "Running Lua example..."
+	zig build run-lua-example
+
+# Test with Lua enabled
+test-lua: setup-lua
+	@echo "Running tests with Lua enabled..."
+	zig build test -Denable-lua=true
+
+# Clean including dependencies
+clean-all: clean
+	@echo "Cleaning dependencies..."
+	rm -rf deps/lua-*
+
 # Show help
 help:
 	@echo "zig_llms Makefile targets:"
+	@echo ""
+	@echo "Basic targets:"
 	@echo "  make build       - Build the library and examples"
 	@echo "  make release     - Build in release mode"
 	@echo "  make test        - Run tests"
@@ -74,4 +106,13 @@ help:
 	@echo "  make check       - Check code without building"
 	@echo "  make docs        - Generate documentation"
 	@echo "  make install     - Install the library"
+	@echo ""
+	@echo "Lua targets:"
+	@echo "  make setup-lua      - Download and set up Lua dependencies"
+	@echo "  make build-lua      - Build with Lua support (default)"
+	@echo "  make build-no-lua   - Build without Lua support"
+	@echo "  make run-lua-example - Run Lua scripting example"
+	@echo "  make test-lua       - Run tests with Lua enabled"
+	@echo "  make clean-all      - Clean everything including deps"
+	@echo ""
 	@echo "  make help        - Show this help message"

@@ -111,6 +111,23 @@
   - Key features: Complete debugging toolkit with minimal overhead when disabled
   - Research document created: docs/lua_debug_introspection.md
 
+## Phase 21: Lua Core Integration - IN PROGRESS
+
+### 21. Lua Core Integration - IN PROGRESS
+- [x] 21.1. Set up Lua library dependencies in build.zig - Completed 2025-06-16
+  - Comprehensive build.zig configuration with Lua 5.4.6 integration
+  - Created build options: enable-lua (default true), lua-jit (for future LuaJIT support)
+  - Implemented buildLuaLib function to create separate Lua static library
+  - Platform-specific defines: LUA_USE_LINUX, LUA_USE_MACOSX, LUA_USE_POSIX, LUA_USE_DLOPEN
+  - Comprehensive Lua source file compilation with proper C99 flags
+  - Setup script: scripts/setup_lua.sh for automatic Lua 5.4.6 download and extraction
+  - Created Zig-friendly Lua C API bindings in src/bindings/lua/lua.zig
+  - Updated Makefile with Lua targets: setup-lua, build-lua, build-no-lua, test-lua, run-lua-example
+  - Dependency management with .gitignore for deps/lua-* and proper README documentation
+  - Verified successful build with and without Lua enabled
+  - Complete cross-platform support (Linux, macOS, Windows, generic POSIX)
+  - Lua wrapper with LuaWrapper struct providing Zig-friendly API wrappers
+
 ## Phase 9: Scripting Engine Interface Infrastructure - COMPLETED 2025-06-15
 
 ### 19. Scripting Engine Interface Core Infrastructure - COMPLETED 2025-06-15

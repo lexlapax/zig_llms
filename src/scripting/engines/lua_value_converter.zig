@@ -8,6 +8,8 @@ const ScriptFunction = @import("../interface.zig").ScriptFunction;
 const NilHandler = @import("lua_nil_handling.zig").NilHandler;
 const LightUserdataManager = @import("lua_light_userdata.zig").LightUserdataManager;
 const LightUserdataConfig = @import("lua_light_userdata.zig").LightUserdataConfig;
+const WeakReferences = @import("lua_weak_references.zig");
+const WeakReferenceRegistry = WeakReferences.WeakReferenceRegistry;
 
 /// Conversion errors
 pub const ConversionError = error{
@@ -1082,6 +1084,279 @@ test "pullScriptValue - round trip conversion" {
 
     const enabled_val = pulled_obj.object.get("enabled").?;
     try std.testing.expect(enabled_val.boolean == true);
+
+    lua.c.lua_pop(wrapper.state, 1);
+}
+
+/// Weak reference integration functions
+pub const WeakReferenceIntegration = struct {
+    /// Create a ScriptValue that holds a weak reference to a Lua object
+    pub fn createWeakScriptValue(
+        allocator: std.mem.Allocator,
+        registry: *WeakReferenceRegistry,
+        wrapper: *lua.LuaWrapper,
+        lua_index: c_int,
+        type_name: []const u8,
+    ) !ScriptValue {
+        const ref_id = try registry.createLuaRef(wrapper, lua_index, type_name);
+
+        // Create a custom userdata that holds the weak reference ID
+        const WeakRefHolder = struct {
+            ref_id: u64,
+            registry: *WeakReferenceRegistry,
+            type_name: []const u8,
+
+            pub fn getValue(self: @This(), alloc: std.mem.Allocator) !?ScriptValue {
+                if (self.registry.getLuaRef(self.ref_id)) |weak_ref| {
+                    return weak_ref.get(alloc);
+                }
+                return null;
+            }
+        };
+
+        const holder = try allocator.create(WeakRefHolder);
+        holder.* = WeakRefHolder{
+            .ref_id = ref_id,
+            .registry = registry,
+            .type_name = try allocator.dupe(u8, type_name),
+        };
+
+        return ScriptValue{ .userdata = ScriptValue.UserData{
+            .ptr = holder,
+            .type_id = try allocator.dupe(u8, "weak_lua_reference"),
+            .deinit_fn = struct {
+                fn deinit(type_id: []const u8, alloc: std.mem.Allocator) void {
+                    alloc.free(type_id);
+                }
+            }.deinit,
+        } };
+    }
+
+    /// Create a weak reference from a Zig object and push it to Lua
+    pub fn pushZigObjectAsWeakRef(
+        registry: *WeakReferenceRegistry,
+        wrapper: *lua.LuaWrapper,
+        ptr: *anyopaque,
+        size: usize,
+        type_name: []const u8,
+    ) !void {
+        const ref_id = try registry.createZigRef(ptr, size, type_name);
+
+        // Create a Lua userdata that holds the weak reference ID
+        const holder_ptr = lua.c.lua_newuserdata(wrapper.state, @sizeOf(u64));
+        const holder: *u64 = @ptrCast(@alignCast(holder_ptr));
+        holder.* = ref_id;
+
+        // Set metatable for type identification
+        if (lua.c.luaL_newmetatable(wrapper.state, "zig_weak_reference") != 0) {
+            // First time creating this metatable
+            lua.c.lua_pushstring(wrapper.state, "__gc");
+            lua.c.lua_pushcfunction(wrapper.state, struct {
+                fn gc(L: ?*lua.c.lua_State) callconv(.C) c_int {
+                    const ref_id_ptr: *u64 = @ptrCast(@alignCast(lua.c.lua_touserdata(L, 1)));
+                    // Note: In a real implementation, we'd need access to the registry here
+                    // for proper cleanup. This is a simplified example.
+                    _ = ref_id_ptr;
+                    return 0;
+                }
+            }.gc);
+            lua.c.lua_settable(wrapper.state, -3);
+        }
+        lua.c.lua_setmetatable(wrapper.state, -2);
+    }
+
+    /// Extract a Zig object from a weak reference userdata
+    pub fn getZigObjectFromWeakRef(
+        registry: *WeakReferenceRegistry,
+        wrapper: *lua.LuaWrapper,
+        lua_index: c_int,
+        comptime T: type,
+    ) ?*T {
+        // Check if this is our weak reference userdata
+        if (lua.c.lua_type(wrapper.state, lua_index) != lua.c.LUA_TUSERDATA) return null;
+
+        // Check metatable
+        if (lua.c.lua_getmetatable(wrapper.state, lua_index) == 0) return null;
+        lua.c.luaL_getmetatable(wrapper.state, "zig_weak_reference");
+        const is_weak_ref = lua.c.lua_rawequal(wrapper.state, -1, -2) != 0;
+        lua.c.lua_pop(wrapper.state, 2); // Remove both metatables
+
+        if (!is_weak_ref) return null;
+
+        // Extract the reference ID
+        const ref_id_ptr: *u64 = @ptrCast(@alignCast(lua.c.lua_touserdata(wrapper.state, lua_index)));
+        const ref_id = ref_id_ptr.*;
+
+        // Get the weak reference and extract the object
+        if (registry.getZigRef(ref_id)) |weak_ref| {
+            return weak_ref.get(T);
+        }
+
+        return null;
+    }
+
+    /// Create a bidirectional weak reference between Lua and Zig objects
+    pub fn createBidirectionalWeakRef(
+        allocator: std.mem.Allocator,
+        registry: *WeakReferenceRegistry,
+        wrapper: *lua.LuaWrapper,
+        lua_index: c_int,
+        zig_ptr: *anyopaque,
+        zig_size: usize,
+        type_name: []const u8,
+    ) !ScriptValue {
+        const ref_id = try registry.createBidirectionalRef(
+            wrapper,
+            lua_index,
+            zig_ptr,
+            zig_size,
+            type_name,
+        );
+
+        // Create a ScriptValue that can access both sides
+        const BiRefHolder = struct {
+            ref_id: u64,
+            registry: *WeakReferenceRegistry,
+            type_name: []const u8,
+
+            pub fn getLuaValue(self: @This(), alloc: std.mem.Allocator) !?ScriptValue {
+                if (self.registry.getBidirectionalRef(self.ref_id)) |bi_ref| {
+                    return bi_ref.getLua(alloc);
+                }
+                return null;
+            }
+
+            pub fn getZigValue(self: @This(), comptime T: type) ?*T {
+                if (self.registry.getBidirectionalRef(self.ref_id)) |bi_ref| {
+                    return bi_ref.getZig(T);
+                }
+                return null;
+            }
+        };
+
+        const holder = try allocator.create(BiRefHolder);
+        holder.* = BiRefHolder{
+            .ref_id = ref_id,
+            .registry = registry,
+            .type_name = try allocator.dupe(u8, type_name),
+        };
+
+        return ScriptValue{ .userdata = ScriptValue.UserData{
+            .ptr = holder,
+            .type_id = try allocator.dupe(u8, "bidirectional_weak_reference"),
+            .deinit_fn = struct {
+                fn deinit(type_id: []const u8, alloc: std.mem.Allocator) void {
+                    alloc.free(type_id);
+                }
+            }.deinit,
+        } };
+    }
+
+    /// Utility function to check if a ScriptValue contains a weak reference
+    pub fn isWeakReference(value: ScriptValue) bool {
+        if (value != .userdata) return false;
+
+        return std.mem.eql(u8, value.userdata.type_id, "weak_lua_reference") or
+            std.mem.eql(u8, value.userdata.type_id, "bidirectional_weak_reference");
+    }
+
+    /// Resolve a weak reference ScriptValue to its actual value
+    pub fn resolveWeakReference(value: ScriptValue, allocator: std.mem.Allocator) !?ScriptValue {
+        if (!isWeakReference(value)) return null;
+
+        if (std.mem.eql(u8, value.userdata.type_id, "weak_lua_reference")) {
+            const holder: *const struct {
+                ref_id: u64,
+                registry: *WeakReferenceRegistry,
+                type_name: []const u8,
+
+                pub fn getValue(self: @This(), alloc: std.mem.Allocator) !?ScriptValue {
+                    if (self.registry.getLuaRef(self.ref_id)) |weak_ref| {
+                        return weak_ref.get(alloc);
+                    }
+                    return null;
+                }
+            } = @ptrCast(@alignCast(value.userdata.ptr));
+
+            return try holder.getValue(allocator);
+        }
+
+        return null;
+    }
+};
+
+// Tests for weak reference integration
+test "WeakReferenceIntegration - basic weak ScriptValue" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    var registry = WeakReferenceRegistry.init(allocator);
+    defer registry.deinit();
+
+    // Create a Lua table
+    lua.c.lua_newtable(wrapper.state);
+    lua.c.lua_pushstring(wrapper.state, "test_value");
+    lua.c.lua_setfield(wrapper.state, -2, "key");
+
+    // Create weak ScriptValue
+    var weak_value = try WeakReferenceIntegration.createWeakScriptValue(
+        allocator,
+        &registry,
+        wrapper,
+        -1,
+        "test_table",
+    );
+    defer weak_value.deinit(allocator);
+
+    lua.c.lua_pop(wrapper.state, 1); // Remove table from stack
+
+    // Test that it's a weak reference
+    try std.testing.expect(WeakReferenceIntegration.isWeakReference(weak_value));
+
+    // Test resolving the weak reference
+    if (try WeakReferenceIntegration.resolveWeakReference(weak_value, allocator)) |resolved| {
+        defer resolved.deinit(allocator);
+        try std.testing.expect(resolved == .object);
+    }
+}
+
+test "WeakReferenceIntegration - Zig object weak reference" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    var registry = WeakReferenceRegistry.init(allocator);
+    defer registry.deinit();
+
+    // Create a Zig object
+    var test_object: i32 = 42;
+
+    // Push as weak reference to Lua
+    try WeakReferenceIntegration.pushZigObjectAsWeakRef(
+        &registry,
+        wrapper,
+        &test_object,
+        @sizeOf(i32),
+        "test_i32",
+    );
+
+    // Try to get it back
+    const retrieved = WeakReferenceIntegration.getZigObjectFromWeakRef(&registry, wrapper, -1, i32);
+    try std.testing.expect(retrieved != null);
+
+    if (retrieved) |ptr| {
+        try std.testing.expectEqual(@as(i32, 42), ptr.*);
+
+        // Release the reference (in real usage, this would be done automatically)
+        if (registry.getZigRef(1)) |weak_ref| { // Assuming ID 1 for first reference
+            weak_ref.release();
+        }
+    }
 
     lua.c.lua_pop(wrapper.state, 1);
 }

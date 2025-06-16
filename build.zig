@@ -178,6 +178,21 @@ pub fn build(b: *std.Build) void {
         const run_lua_weak_refs = b.addRunArtifact(lua_weak_refs_example);
         const run_lua_weak_refs_step = b.step("run-lua-weak-refs", "Run the Lua weak references system demo");
         run_lua_weak_refs_step.dependOn(&run_lua_weak_refs.step);
+
+        // Add Lua struct serialization demo
+        const lua_struct_serialization_example = b.addExecutable(.{
+            .name = "lua_struct_serialization_demo",
+            .root_source_file = b.path("examples/lua_struct_serialization_demo.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+
+        lua_struct_serialization_example.root_module.addImport("zig_llms", lib.root_module);
+        lua_struct_serialization_example.linkLibrary(lib);
+        
+        const run_lua_struct_serialization = b.addRunArtifact(lua_struct_serialization_example);
+        const run_lua_struct_serialization_step = b.step("run-lua-struct-serialization", "Run the Lua struct serialization demo");
+        run_lua_struct_serialization_step.dependOn(&run_lua_struct_serialization.step);
     }
 }
 

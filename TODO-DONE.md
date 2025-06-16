@@ -869,3 +869,138 @@
     - State recovery and custom callbacks
   - Updated main.zig exports to include panic handling types
   - Added comprehensive tests for panic handler functionality
+
+### 22. Lua Type System and Value Bridge - COMPLETED 2025-06-16
+
+- [x] 22.1. Implement ScriptValue to lua_push* functions - Completed 2025-06-16
+  - Complete lua_value_converter.zig with bidirectional type conversion
+  - pushScriptValue function supporting all ScriptValue types (nil, boolean, integer, number, string, array, object, function, userdata)
+  - Comprehensive table conversion with array vs object detection
+  - Function conversion with placeholder for advanced function bridge
+  - Userdata conversion supporting both light and full userdata
+  - Error handling with ConversionError enum and stack management
+  - Type validation and bounds checking for safe conversions
+  - Stack safety with proper cleanup and error propagation
+
+- [x] 22.2. Implement lua_to* to ScriptValue conversion - Completed 2025-06-16
+  - pullScriptValue function with comprehensive Lua type detection
+  - Complete type conversion for all Lua types: nil, boolean, number, string, table, function, userdata, thread
+  - Advanced table conversion with automatic array vs object detection using isLuaArray heuristics
+  - Table conversion with configurable options (max depth, circular reference detection)
+  - String conversion with proper memory management and null-terminated string handling
+  - Number conversion with integer vs float detection using lua_isinteger
+  - Function conversion with ScriptFunction interface integration
+  - Userdata conversion with type safety and metadata extraction
+  - Comprehensive test coverage for all conversion scenarios
+
+- [x] 22.3. Handle Lua tables ↔ ScriptValue.Object conversion - Completed as part of 22.2 on 2025-06-16
+  - Integrated into pullTableValue and pushTableValue functions
+  - Object conversion with HashMap-based ScriptValue.Object
+  - Key-value pair iteration with proper string key handling
+  - Nested object support with depth tracking
+  - Memory management for object field allocation and cleanup
+
+- [x] 22.4. Implement Lua arrays ↔ ScriptValue.Array conversion - Completed as part of 22.2 on 2025-06-16
+  - Integrated into pullTableValue and pushTableValue functions  
+  - Array detection using isLuaArray with configurable thresholds
+  - Sequential integer index handling starting from 1 (Lua convention)
+  - Dynamic array allocation with ArrayList backing
+  - Mixed array/object handling with fallback to object representation
+
+- [x] 22.5. Add function reference handling and callbacks - Completed 2025-06-16
+  - Created lua_function_bridge.zig with comprehensive function bridge system
+  - LuaFunctionRef for storing Lua functions callable from Zig using LUA_REGISTRYINDEX
+  - ZigFunctionRef for exposing Zig functions to Lua with C trampoline functions
+  - BidirectionalFunctionRef combining both directions for complex scenarios
+  - Registry-based function storage with automatic cleanup and lifecycle management
+  - Function call mechanism with argument conversion and return value handling
+  - Error propagation between Lua and Zig with proper stack management
+  - Comprehensive demo showing bidirectional function calls and complex compositions
+  - Integration with lua_value_converter.zig for seamless ScriptValue conversion
+
+- [x] 22.6. Implement userdata system for complex Zig types - Completed 2025-06-16
+  - Created lua_userdata_system.zig with type-safe userdata implementation
+  - UserdataHeader with magic number, type information, version tracking, and destructor support
+  - LuaUserdataManager with create, get, and validation operations
+  - UserdataTypeInfo with size, alignment, destructor, and validation function support
+  - UserdataRegistry for managing multiple userdata types with name-based lookup
+  - Metatable system for userdata with __gc, __tostring, and custom metamethods
+  - Type safety validation with magic number verification and size checking
+  - Memory management with automatic cleanup and proper destructor calls
+  - Integration with lua_value_converter.zig for pullUserdataValue and pushUserdataValue
+  - Comprehensive demo showing userdata creation, manipulation, and lifecycle management
+
+- [x] 22.7. Add proper nil/null handling - Completed 2025-06-16
+  - Created lua_nil_handling.zig with comprehensive nil semantics system
+  - NilContext enum supporting strict, lenient, JavaScript-like, and custom nil detection
+  - NilHandler with shouldTreatAsNil logic for context-sensitive nil interpretation
+  - ScriptValue nil creation with createNilScriptValue utility
+  - Lua nil validation with validateNilConsistency for cross-language consistency
+  - NilValidationResult with detailed reporting of nil handling mismatches
+  - Integration with lua_value_converter.zig for consistent nil/null semantics
+  - Support for optional types, undefined values, and empty collections as nil equivalents
+  - Comprehensive demo showing different nil contexts and validation scenarios
+
+- [x] 22.8. Implement light userdata optimization for simple pointers - Completed 2025-06-16
+  - Created lua_light_userdata.zig with performance optimization system
+  - LightUserdataStrategy enum: never, safe_types_only, aggressive, heuristic
+  - LightUserdataConfig with strategy, size limits, type tagging, and pointer validation
+  - SafeLightUserdataTypes mapping for known safe types (primitives and simple pointers)
+  - LightUserdataManager with shouldUseLightUserdata decision logic
+  - Value packing for small types directly into pointer storage
+  - Allocated light userdata for larger types with memory tracking
+  - Type safety with pushLightUserdata and getLightUserdata operations
+  - Integration with lua_value_converter.zig through pushUserdataOptimized
+  - OptimizationMetrics for tracking performance improvements and memory savings
+  - Comprehensive demo showing optimization strategies and performance comparisons
+
+- [x] 22.9. Add custom userdata type registry with version checking - Completed 2025-06-16
+  - Created lua_userdata_registry.zig with versioned type management system
+  - TypeVersion with semantic versioning (major.minor.patch) and compatibility checking
+  - VersionedTypeInfo extending UserdataTypeInfo with version, migration, and validation support
+  - TypeMigrationFn for automatic data migration between type versions
+  - VersionedUserdataRegistry with type registration, version history, and compatibility matrix
+  - Schema evolution support with automatic migration between compatible versions
+  - Type validation with custom validation functions and schema hash verification
+  - Version history tracking with complete migration path documentation
+  - RegistryStatistics for monitoring type usage and version distribution
+  - CompatibilityMatrix for analyzing cross-version compatibility relationships
+  - ExampleMigrations showing padding migration and field reordering patterns
+  - RegistrationUtils for simplified type registration with migration support
+  - Comprehensive demo showing type evolution, migration, and validation scenarios
+
+- [x] 22.10. Create bidirectional weak reference system - Completed 2025-06-16
+  - Created lua_weak_references.zig with comprehensive weak reference implementation
+  - LuaWeakRef for Lua-to-Zig weak references using LUA_REGISTRYINDEX storage
+  - ZigWeakRef for Zig-to-Lua weak references with thread-safe reference counting
+  - BidirectionalWeakRef combining both directions for complex object relationships
+  - WeakReferenceRegistry for centralized management of all weak reference types
+  - Automatic expiration detection when objects are garbage collected
+  - Thread-safe operations with proper synchronization using mutexes and atomic operations
+  - Custom cleanup callbacks for resource management and lifecycle tracking
+  - Performance optimization for high-frequency reference operations
+  - Memory safety validation and circular reference prevention
+  - WeakReferenceStatistics for monitoring reference usage and active ratios
+  - Integration with lua_value_converter.zig through WeakReferenceIntegration utilities
+  - Comprehensive demo showing all reference types, performance benchmarks, and edge cases
+
+- [x] 22.11. Implement automatic Zig struct serialization to Lua tables - Completed 2025-06-16
+  - Created lua_struct_serialization.zig with reflection-based struct conversion
+  - StructSerializer with structToLuaTable and luaTableToStruct bidirectional conversion
+  - SerializationOptions with field inclusion, depth limits, name transformation, and validation
+  - FieldNameTransform supporting snake_case ↔ camelCase conversion with custom mappings
+  - SerializationContext with circular reference detection and depth tracking
+  - Comprehensive type support:
+    - Primitive types: bool, int, float, enum with automatic conversion
+    - Optional types: automatic nil handling for missing fields  
+    - Arrays and slices: dynamic array serialization with proper indexing
+    - Nested structs: recursive serialization with configurable depth limits
+    - Union types: tagged union serialization with type safety
+    - Pointers: automatic dereferencing and allocation management
+  - Field metadata extraction with StructSerializationUtils.getStructFieldInfo
+  - Table structure validation with validateTableStructure and error reporting
+  - Performance optimization with configurable serialization strategies
+  - Round-trip serialization verification and consistency checking
+  - ValidationResult with detailed error reporting for debugging
+  - FieldInfo reflection for runtime struct analysis and documentation
+  - Comprehensive demo showing complex nested structures, unions, field transformations, and performance benchmarks

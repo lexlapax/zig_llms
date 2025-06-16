@@ -77,11 +77,11 @@ zig_llms is currently under active development with significant progress across 
 - **API Bridges**: 10 complete bridges exposing all zig_llms functionality to scripts
 - **Type Marshaling**: Complex structure conversion for AgentConfig, ToolDefinition, etc.
 
-### 🚧 Lua Scripting Engine In Progress (Phase 10)
+### 🚧 Lua Scripting Engine In Progress (Phase 10) - 60% Complete
 - ✅ **Research and Planning**: Comprehensive analysis of Lua 5.4 integration (10/10 complete)
 - ✅ **Core Integration**: State management, pooling, isolation, snapshots, panic handling (10/10 complete)
-- 🚧 **Type System**: ScriptValue ↔ Lua type conversion (0/11 in progress)
-- 📋 **API Bridge Integration**: Lua C function wrappers for all bridges
+- ✅ **Type System**: ScriptValue ↔ Lua type conversion with weak references and struct serialization (11/11 complete)
+- 🚧 **API Bridge Integration**: Lua C function wrappers for all bridges (0/14 in progress)
 - 📋 **Advanced Features**: Coroutines, metatables, module system, debug hooks
 - 📋 **Security & Sandboxing**: Restricted environments, resource limits, bytecode validation
 
@@ -129,6 +129,7 @@ zig_llms is currently under active development with significant progress across 
     *   10 complete API bridges exposing all zig_llms functionality
     *   Type marshaling system for complex structure conversion
     *   Lua 5.4 engine with state management, pooling, isolation, and panic handling
+    *   Complete Lua type system with bidirectional ScriptValue conversion, weak references, and struct serialization
 *   **C-API for Bindings**: ✅ **IMPLEMENTED**
     *   Complete C-API with memory management and error handling
     *   Session-based isolation for multi-client scenarios

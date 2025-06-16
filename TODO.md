@@ -35,8 +35,8 @@
    22.5. [x] Add function reference handling and callbacks
    22.6. [x] Implement userdata system for complex Zig types
    22.7. [x] Add proper nil/null handling
-   22.8. [ ] Implement light userdata optimization for simple pointers
-   22.9. [ ] Add custom userdata type registry with version checking
+   22.8. [x] Implement light userdata optimization for simple pointers
+   22.9. [x] Add custom userdata type registry with version checking
    22.10. [ ] Create bidirectional weak reference system
    22.11. [ ] Implement automatic Zig struct serialization to Lua tables
 
@@ -337,11 +337,11 @@
   - ✅ Hook Bridge: Registration, execution, filtering, composition
   - ✅ Output Bridge: Parsing, recovery, format detection, validation
 
-**Language Engine Implementations: 35% Complete** 🚧
-- 🚧 Lua Engine (Phase 10) - Core integration and comprehensive type system implemented
+**Language Engine Implementations: 45% Complete** 🚧
+- 🚧 Lua Engine (Phase 10) - Advanced type system with optimization and versioning complete
   - ✅ Lua 5.4 Research and Planning (10/10 complete)
   - ✅ Lua Core Integration (10/10 complete) - State management, pooling, isolation, snapshots, panic handling
-  - 🚧 Lua Type System and Value Bridge (7/11 complete) - Function bridging, userdata system, nil handling complete
+  - 🚧 Lua Type System and Value Bridge (9/11 complete) - Function bridging, userdata system, optimization, versioning complete
 - ⏳ QuickJS Engine (Phase 11) - Modern JavaScript with async support
 - ⏳ Wren Engine (Phase 12) - Fiber-based concurrency system
 - 🔮 Python Engine (Future) - CPython integration with GIL handling

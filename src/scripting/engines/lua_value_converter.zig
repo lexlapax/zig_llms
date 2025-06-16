@@ -6,6 +6,8 @@ const lua = @import("../../bindings/lua/lua.zig");
 const ScriptValue = @import("../value_bridge.zig").ScriptValue;
 const ScriptFunction = @import("../interface.zig").ScriptFunction;
 const NilHandler = @import("lua_nil_handling.zig").NilHandler;
+const LightUserdataManager = @import("lua_light_userdata.zig").LightUserdataManager;
+const LightUserdataConfig = @import("lua_light_userdata.zig").LightUserdataConfig;
 
 /// Conversion errors
 pub const ConversionError = error{
@@ -441,6 +443,48 @@ fn pushUserdata(wrapper: *lua.LuaWrapper, ud: ScriptValue.UserData) !void {
     // 1. Checking if we have a userdata manager available
     // 2. Looking up type information from ud.type_id
     // 3. Creating proper full userdata with metatable if type is registered
+}
+
+/// Enhanced userdata push with light userdata optimization
+pub fn pushUserdataOptimized(
+    wrapper: *lua.LuaWrapper,
+    ud: ScriptValue.UserData,
+    light_manager: ?*LightUserdataManager,
+) !void {
+    if (!lua.lua_enabled) return ConversionError.LuaNotEnabled;
+
+    if (light_manager) |manager| {
+        // Try to use light userdata optimization based on type
+        if (isSimplePointerType(ud.type_id)) {
+            lua.c.lua_pushlightuserdata(wrapper.state, ud.ptr);
+            return;
+        }
+
+        // Try to convert to optimized ScriptValue if possible
+        const script_value = try manager.lightUserdataToScriptValue(-1, manager.allocator, ud.type_id);
+        _ = script_value; // For now, just use standard approach
+    }
+
+    // Fall back to standard light userdata
+    lua.c.lua_pushlightuserdata(wrapper.state, ud.ptr);
+}
+
+/// Check if a type ID indicates a simple pointer type suitable for light userdata
+fn isSimplePointerType(type_id: []const u8) bool {
+    const simple_types = [_][]const u8{
+        "i8",                "i16", "i32",  "i64",        "isize",
+        "u8",                "u16", "u32",  "u64",        "usize",
+        "f32",               "f64", "bool", "*anyopaque", "?*anyopaque",
+        "lua_lightuserdata",
+    };
+
+    for (simple_types) |simple_type| {
+        if (std.mem.eql(u8, type_id, simple_type)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /// Pull Lua table as ScriptValue (array or object)

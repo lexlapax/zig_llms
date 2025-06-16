@@ -5,6 +5,10 @@ const std = @import("std");
 const lua = @import("../../bindings/lua/lua.zig");
 const ScriptContext = @import("../context.zig").ScriptContext;
 const EngineConfig = @import("../interface.zig").EngineConfig;
+const snapshot_mod = @import("lua_snapshot.zig");
+const SnapshotManager = snapshot_mod.SnapshotManager;
+const SnapshotSerializer = snapshot_mod.SnapshotSerializer;
+const SnapshotDeserializer = snapshot_mod.SnapshotDeserializer;
 
 /// Lua state lifecycle errors
 pub const LifecycleError = error{
@@ -139,6 +143,7 @@ pub const ManagedLuaState = struct {
     isolation_level: IsolationLevel,
     snapshots: std.ArrayList(StateSnapshot),
     mutex: std.Thread.Mutex,
+    snapshot_manager: ?*SnapshotManager,
 
     pub const IsolationLevel = enum {
         none, // No isolation
@@ -165,6 +170,17 @@ pub const ManagedLuaState = struct {
             try lua.LuaWrapper.init(allocator);
         errdefer wrapper.deinit();
 
+        // Create snapshot manager if snapshots are enabled
+        const snapshot_manager = if (config.enable_snapshots)
+            try SnapshotManager.init(
+                allocator,
+                config.max_snapshots,
+                config.max_snapshot_size_bytes,
+            )
+        else
+            null;
+        errdefer if (snapshot_manager) |sm| sm.deinit();
+
         self.* = Self{
             .state = wrapper.state,
             .wrapper = wrapper,
@@ -179,6 +195,7 @@ pub const ManagedLuaState = struct {
             },
             .snapshots = std.ArrayList(StateSnapshot).init(allocator),
             .mutex = std.Thread.Mutex{},
+            .snapshot_manager = snapshot_manager,
         };
 
         try self.configure();
@@ -191,11 +208,16 @@ pub const ManagedLuaState = struct {
 
         self.stage = .cleanup;
 
-        // Clean up snapshots
+        // Clean up old snapshot system
         for (self.snapshots.items) |*snapshot| {
             snapshot.deinit();
         }
         self.snapshots.deinit();
+
+        // Clean up new snapshot manager
+        if (self.snapshot_manager) |sm| {
+            sm.deinit();
+        }
 
         self.wrapper.deinit();
         self.stage = .destroyed;
@@ -334,32 +356,83 @@ pub const ManagedLuaState = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        const snapshot = try StateSnapshot.init(self.allocator, self.state);
-        try self.snapshots.append(snapshot);
+        if (self.snapshot_manager) |sm| {
+            // Use new comprehensive snapshot system
+            var serializer = SnapshotSerializer.init(self.wrapper, self.allocator, .{});
+            defer serializer.deinit();
+
+            const snapshot_id = try std.fmt.allocPrint(self.allocator, "snapshot_{d}", .{std.time.milliTimestamp()});
+            defer self.allocator.free(snapshot_id);
+
+            const snapshot = try serializer.createSnapshot(snapshot_id, "State snapshot");
+            try sm.addSnapshot(snapshot);
+        } else {
+            // Fall back to old simple snapshot system
+            const snapshot = try StateSnapshot.init(self.allocator, self.state);
+            try self.snapshots.append(snapshot);
+        }
     }
 
     pub fn restoreSnapshot(self: *Self, index: usize) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        if (index >= self.snapshots.items.len) {
-            return LifecycleError.InvalidState;
-        }
+        if (self.snapshot_manager) |sm| {
+            // Get snapshot by index from list
+            const snapshots = try sm.listSnapshots(self.allocator);
+            defer {
+                for (snapshots) |*s| s.deinit(self.allocator);
+                self.allocator.free(snapshots);
+            }
 
-        const snapshot = &self.snapshots.items[index];
-        try snapshot.restore(self.state);
+            if (index >= snapshots.len) {
+                return LifecycleError.InvalidState;
+            }
+
+            const snapshot = sm.getSnapshot(snapshots[index].id) orelse return LifecycleError.InvalidState;
+
+            // Use deserializer to restore
+            var deserializer = SnapshotDeserializer.init(self.wrapper, self.allocator);
+            defer deserializer.deinit();
+
+            try deserializer.restoreSnapshot(snapshot);
+        } else {
+            // Fall back to old simple restore
+            if (index >= self.snapshots.items.len) {
+                return LifecycleError.InvalidState;
+            }
+
+            const snapshot = &self.snapshots.items[index];
+            try snapshot.restore(self.state);
+        }
     }
 
     pub fn removeSnapshot(self: *Self, index: usize) !void {
         self.mutex.lock();
         defer self.mutex.unlock();
 
-        if (index >= self.snapshots.items.len) {
-            return LifecycleError.InvalidState;
-        }
+        if (self.snapshot_manager) |sm| {
+            // Get snapshot by index from list
+            const snapshots = try sm.listSnapshots(self.allocator);
+            defer {
+                for (snapshots) |*s| s.deinit(self.allocator);
+                self.allocator.free(snapshots);
+            }
 
-        var snapshot = self.snapshots.swapRemove(index);
-        snapshot.deinit();
+            if (index >= snapshots.len) {
+                return LifecycleError.InvalidState;
+            }
+
+            try sm.removeSnapshot(snapshots[index].id);
+        } else {
+            // Fall back to old simple remove
+            if (index >= self.snapshots.items.len) {
+                return LifecycleError.InvalidState;
+            }
+
+            var snapshot = self.snapshots.swapRemove(index);
+            snapshot.deinit();
+        }
     }
 
     pub fn execute(self: *Self, code: []const u8) !void {
@@ -443,6 +516,58 @@ pub const ManagedLuaState = struct {
         return self.stage == .active and
             self.stats.error_count < 100 and // Arbitrary threshold
             self.getMemoryUsage() < (self.config.max_memory_bytes * 2); // 200% of limit
+    }
+
+    pub fn createSnapshotWithId(self: *Self, id: []const u8, description: ?[]const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const sm = self.snapshot_manager orelse return LifecycleError.SnapshotFailed;
+
+        var serializer = SnapshotSerializer.init(self.wrapper, self.allocator, .{});
+        defer serializer.deinit();
+
+        const snapshot = try serializer.createSnapshot(id, description);
+        try sm.addSnapshot(snapshot);
+    }
+
+    pub fn restoreSnapshotById(self: *Self, id: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const sm = self.snapshot_manager orelse return LifecycleError.RestoreFailed;
+        const snapshot = sm.getSnapshot(id) orelse return LifecycleError.SnapshotFailed;
+
+        var deserializer = SnapshotDeserializer.init(self.wrapper, self.allocator);
+        defer deserializer.deinit();
+
+        try deserializer.restoreSnapshot(snapshot);
+
+        // Update stats
+        self.stats.recordReset();
+        self.stage = .active;
+    }
+
+    pub fn listSnapshots(self: *Self) ![]snapshot_mod.SnapshotMetadata {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const sm = self.snapshot_manager orelse {
+            // Return empty list if no snapshot manager
+            return self.allocator.alloc(snapshot_mod.SnapshotMetadata, 0);
+        };
+
+        return try sm.listSnapshots(self.allocator);
+    }
+
+    pub fn getSnapshotCount(self: *Self) usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        if (self.snapshot_manager) |sm| {
+            return sm.snapshots.count();
+        }
+        return self.snapshots.items.len;
     }
 };
 

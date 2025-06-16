@@ -150,6 +150,17 @@ pub const scripting = struct {
             pub const LuaStatePool = @import("scripting/engines/lua_lifecycle.zig").LuaStatePool;
             pub const ScopedLuaState = @import("scripting/engines/lua_lifecycle.zig").ScopedLuaState;
             pub const ManagedLuaState = @import("scripting/engines/lua_lifecycle.zig").ManagedLuaState;
+            pub const StateStats = @import("scripting/engines/lua_lifecycle.zig").StateStats;
+            pub const LifecycleStage = @import("scripting/engines/lua_lifecycle.zig").LifecycleStage;
+        };
+        pub const lua_snapshot = struct {
+            pub const StateSnapshot = @import("scripting/engines/lua_snapshot.zig").StateSnapshot;
+            pub const SnapshotMetadata = @import("scripting/engines/lua_snapshot.zig").SnapshotMetadata;
+            pub const SnapshotManager = @import("scripting/engines/lua_snapshot.zig").SnapshotManager;
+            pub const SnapshotSerializer = @import("scripting/engines/lua_snapshot.zig").SnapshotSerializer;
+            pub const SnapshotDeserializer = @import("scripting/engines/lua_snapshot.zig").SnapshotDeserializer;
+            pub const SerializedValue = @import("scripting/engines/lua_snapshot.zig").SerializedValue;
+            pub const SnapshotError = @import("scripting/engines/lua_snapshot.zig").SnapshotError;
         };
     };
 

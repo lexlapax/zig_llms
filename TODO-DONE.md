@@ -791,3 +791,31 @@
     - Security restriction validation
     - Tenant lifecycle management
   - Added tests for isolation, resource limits, and security
+
+- [x] 21.9. Create lua_State snapshots for rollback capabilities - Completed 2025-06-16
+  - Created lua_snapshot.zig with comprehensive snapshot system
+  - Implemented StateSnapshot with metadata, globals, registry, and GC state
+  - Created SerializedValue union for representing all Lua types
+  - Implemented SnapshotSerializer with circular reference detection
+  - Added table serialization with metatable support
+  - Created placeholder implementations for function, userdata, and thread serialization
+  - Implemented SnapshotDeserializer for state restoration
+  - Created SnapshotManager for managing multiple snapshots:
+    - Snapshot storage with configurable limits
+    - Automatic eviction of old snapshots
+    - Metadata tracking with timestamps and checksums
+  - Enhanced ManagedLuaState with snapshot integration:
+    - createSnapshot() using new comprehensive system
+    - restoreSnapshot() with deserializer
+    - Snapshot management methods (list, count, remove)
+  - Added snapshot configuration to EngineConfig:
+    - enable_snapshots flag
+    - max_snapshots limit
+    - max_snapshot_size_bytes for total storage
+  - Created lua_snapshot_demo.zig demonstrating:
+    - Basic snapshot and restore functionality
+    - Multiple checkpoint management
+    - Complex data preservation limitations
+    - Snapshot lifecycle and management
+  - Updated main.zig exports to include snapshot types
+  - Added comprehensive tests for snapshot creation and management

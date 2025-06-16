@@ -23,6 +23,15 @@ pub const EngineConfig = struct {
     /// Security sandbox level
     sandbox_level: SandboxLevel = .restricted,
 
+    /// Enable state snapshots for rollback capabilities
+    enable_snapshots: bool = false,
+
+    /// Maximum number of snapshots to keep per state
+    max_snapshots: usize = 10,
+
+    /// Maximum total size of all snapshots in bytes
+    max_snapshot_size_bytes: usize = 50 * 1024 * 1024, // 50MB default
+
     pub const SandboxLevel = enum {
         /// No restrictions
         none,

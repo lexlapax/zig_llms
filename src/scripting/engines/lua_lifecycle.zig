@@ -451,24 +451,53 @@ pub const LuaStatePool = struct {
     const Self = @This();
 
     available_states: std.ArrayList(*ManagedLuaState),
-    in_use_states: std.AutoHashMap(*ManagedLuaState, bool),
+    in_use_states: std.AutoHashMap(*ManagedLuaState, StateMetadata),
     allocator: std.mem.Allocator,
     config: EngineConfig,
-    max_pool_size: usize,
-    max_idle_time: i64, // milliseconds
+    pool_config: PoolConfig,
     mutex: std.Thread.Mutex,
+    total_created: u32,
+    total_recycled: u32,
+    generation: u32,
+
+    pub const PoolConfig = struct {
+        min_pool_size: usize = 2,
+        max_pool_size: usize = 8,
+        max_idle_time_ms: i64 = 5 * 60 * 1000, // 5 minutes
+        max_state_age_ms: i64 = 30 * 60 * 1000, // 30 minutes
+        max_state_uses: u32 = 1000,
+        enable_warmup: bool = true,
+        validate_on_acquire: bool = true,
+    };
+
+    const StateMetadata = struct {
+        created_at: i64,
+        last_used: i64,
+        use_count: u32,
+        generation: u32,
+    };
 
     pub fn init(allocator: std.mem.Allocator, config: EngineConfig, max_pool_size: usize) !*Self {
         const self = try allocator.create(Self);
         self.* = Self{
             .available_states = std.ArrayList(*ManagedLuaState).init(allocator),
-            .in_use_states = std.AutoHashMap(*ManagedLuaState, bool).init(allocator),
+            .in_use_states = std.AutoHashMap(*ManagedLuaState, StateMetadata).init(allocator),
             .allocator = allocator,
             .config = config,
-            .max_pool_size = max_pool_size,
-            .max_idle_time = 5 * 60 * 1000, // 5 minutes
+            .pool_config = PoolConfig{
+                .max_pool_size = max_pool_size,
+            },
             .mutex = std.Thread.Mutex{},
+            .total_created = 0,
+            .total_recycled = 0,
+            .generation = 0,
         };
+
+        // Warmup pool with minimum states if enabled
+        if (self.pool_config.enable_warmup) {
+            try self.warmupPool();
+        }
+
         return self;
     }
 
@@ -499,22 +528,49 @@ pub const LuaStatePool = struct {
         // Try to reuse available state
         while (self.available_states.items.len > 0) {
             const state = self.available_states.pop();
+            const metadata = self.getStateMetadata(state);
 
-            // Check if state is still healthy
-            if (state.isHealthy()) {
-                try state.reset();
-                try self.in_use_states.put(state, true);
-                return state;
-            } else {
-                // State is unhealthy, destroy it
+            // Check if state should be recycled based on age and use count
+            if (self.shouldRecycleState(state, metadata)) {
                 state.deinit();
+                self.total_recycled += 1;
+                continue;
             }
+
+            // Validate state if enabled
+            if (self.pool_config.validate_on_acquire and !self.validateState(state)) {
+                state.deinit();
+                self.total_recycled += 1;
+                continue;
+            }
+
+            // State is good, prepare for use
+            try state.reset();
+
+            // Update metadata
+            try self.in_use_states.put(state, StateMetadata{
+                .created_at = metadata.created_at,
+                .last_used = std.time.milliTimestamp(),
+                .use_count = metadata.use_count + 1,
+                .generation = metadata.generation,
+            });
+
+            return state;
         }
 
         // Create new state if pool not at capacity
-        if (self.getTotalStates() < self.max_pool_size) {
+        if (self.getTotalStates() < self.pool_config.max_pool_size) {
             const state = try ManagedLuaState.init(self.allocator, self.config);
-            try self.in_use_states.put(state, true);
+            self.generation += 1;
+            self.total_created += 1;
+
+            try self.in_use_states.put(state, StateMetadata{
+                .created_at = std.time.milliTimestamp(),
+                .last_used = std.time.milliTimestamp(),
+                .use_count = 1,
+                .generation = self.generation,
+            });
+
             return state;
         }
 
@@ -525,17 +581,23 @@ pub const LuaStatePool = struct {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        const metadata = self.in_use_states.get(state);
         _ = self.in_use_states.remove(state);
 
         // Check if we should keep this state in the pool
-        if (state.isHealthy() and self.available_states.items.len < self.max_pool_size) {
+        if (state.isHealthy() and
+            self.available_states.items.len < self.pool_config.max_pool_size and
+            (metadata == null or !self.shouldRecycleState(state, metadata.?)))
+        {
             state.suspendState();
             self.available_states.append(state) catch {
                 // Pool full, destroy state
                 state.deinit();
+                self.total_recycled += 1;
             };
         } else {
             state.deinit();
+            self.total_recycled += 1;
         }
     }
 
@@ -548,24 +610,52 @@ pub const LuaStatePool = struct {
         while (i < self.available_states.items.len) {
             const state = self.available_states.items[i];
             const stats = state.getStats();
+            const metadata = self.getStateMetadata(state);
 
-            if (stats.getIdleTime() > self.max_idle_time) {
+            const should_remove = stats.getIdleTime() > self.pool_config.max_idle_time_ms or
+                (metadata != null and self.shouldRecycleState(state, metadata.?)) or
+                self.available_states.items.len > self.pool_config.min_pool_size;
+
+            if (should_remove) {
                 _ = self.available_states.swapRemove(i);
                 state.deinit();
+                self.total_recycled += 1;
             } else {
                 i += 1;
             }
         }
+
+        // Ensure minimum pool size
+        self.ensureMinimumStates() catch {};
     }
 
     pub fn getStats(self: *Self) PoolStats {
         self.mutex.lock();
         defer self.mutex.unlock();
 
+        var total_uses: u64 = 0;
+        var total_age: i64 = 0;
+        const now = std.time.milliTimestamp();
+        var count: usize = 0;
+
+        // Calculate averages from in-use states
+        var iter = self.in_use_states.iterator();
+        while (iter.next()) |entry| {
+            total_uses += entry.value_ptr.use_count;
+            total_age += now - entry.value_ptr.created_at;
+            count += 1;
+        }
+
         return PoolStats{
             .available_count = self.available_states.items.len,
             .in_use_count = self.in_use_states.count(),
-            .max_pool_size = self.max_pool_size,
+            .total_count = self.getTotalStates(),
+            .min_pool_size = self.pool_config.min_pool_size,
+            .max_pool_size = self.pool_config.max_pool_size,
+            .total_created = self.total_created,
+            .total_recycled = self.total_recycled,
+            .average_uses = if (count > 0) @as(f64, @floatFromInt(total_uses)) / @as(f64, @floatFromInt(count)) else 0,
+            .average_age_ms = if (count > 0) @as(f64, @floatFromInt(total_age)) / @as(f64, @floatFromInt(count)) else 0,
         };
     }
 
@@ -573,11 +663,110 @@ pub const LuaStatePool = struct {
         return self.available_states.items.len + self.in_use_states.count();
     }
 
+    fn shouldRecycleState(self: *Self, state: *ManagedLuaState, metadata: StateMetadata) bool {
+        _ = state;
+        const now = std.time.milliTimestamp();
+
+        // Check age
+        if (self.pool_config.max_state_age_ms > 0 and
+            (now - metadata.created_at) > self.pool_config.max_state_age_ms)
+        {
+            return true;
+        }
+
+        // Check use count
+        if (self.pool_config.max_state_uses > 0 and
+            metadata.use_count >= self.pool_config.max_state_uses)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    fn validateState(self: *Self, state: *ManagedLuaState) bool {
+        _ = self;
+        if (!lua.lua_enabled) return false;
+
+        // Perform a simple operation to verify state integrity
+        const wrapper = state.wrapper;
+        const initial_top = wrapper.getTop();
+        wrapper.pushNil();
+        const success = wrapper.getTop() == initial_top + 1;
+        wrapper.pop(1);
+
+        return success and state.isHealthy();
+    }
+
+    fn getStateMetadata(self: *Self, state: *ManagedLuaState) ?StateMetadata {
+        // First check in-use states
+        if (self.in_use_states.get(state)) |metadata| {
+            return metadata;
+        }
+
+        // For available states, we don't track metadata currently
+        // Could enhance this by maintaining a separate metadata map
+        return null;
+    }
+
+    fn warmupPool(self: *Self) !void {
+        while (self.available_states.items.len < self.pool_config.min_pool_size) {
+            const state = try ManagedLuaState.init(self.allocator, self.config);
+            self.generation += 1;
+            self.total_created += 1;
+
+            state.suspendState();
+            try self.available_states.append(state);
+        }
+    }
+
+    fn ensureMinimumStates(self: *Self) !void {
+        while (self.getTotalStates() < self.pool_config.min_pool_size) {
+            const state = try ManagedLuaState.init(self.allocator, self.config);
+            self.generation += 1;
+            self.total_created += 1;
+
+            state.suspendState();
+            try self.available_states.append(state);
+        }
+    }
+
     pub const PoolStats = struct {
         available_count: usize,
         in_use_count: usize,
+        total_count: usize,
+        min_pool_size: usize,
         max_pool_size: usize,
+        total_created: u32,
+        total_recycled: u32,
+        average_uses: f64,
+        average_age_ms: f64,
     };
+};
+
+/// Scoped state handle for automatic release
+pub const ScopedLuaState = struct {
+    pool: *LuaStatePool,
+    state: *ManagedLuaState,
+
+    pub fn init(pool: *LuaStatePool) !ScopedLuaState {
+        return ScopedLuaState{
+            .pool = pool,
+            .state = try pool.acquire(),
+        };
+    }
+
+    pub fn deinit(self: *ScopedLuaState) void {
+        self.pool.release(self.state);
+    }
+
+    pub fn getState(self: *ScopedLuaState) *ManagedLuaState {
+        return self.state;
+    }
+
+    pub fn getWrapper(self: *ScopedLuaState) *lua.LuaWrapper {
+        return self.state.wrapper;
+    }
 };
 
 // Tests
@@ -628,4 +817,96 @@ test "LuaStatePool operations" {
 
     const stats = pool.getStats();
     try std.testing.expect(stats.available_count <= 2);
+}
+
+test "LuaStatePool enhanced features" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const config = EngineConfig{};
+
+    const pool = try LuaStatePool.init(allocator, config, 5);
+    defer pool.deinit();
+
+    // Test initial pool warmup
+    const initial_stats = pool.getStats();
+    try std.testing.expect(initial_stats.available_count >= pool.pool_config.min_pool_size);
+
+    // Test state acquisition and reuse
+    const state1 = try pool.acquire();
+    const state2 = try pool.acquire();
+
+    try std.testing.expect(pool.getStats().in_use_count == 2);
+
+    pool.release(state1);
+    pool.release(state2);
+
+    try std.testing.expect(pool.getStats().available_count >= 2);
+
+    // Test that we get reused states
+    const state3 = try pool.acquire();
+    pool.release(state3);
+
+    const stats = pool.getStats();
+    try std.testing.expect(stats.total_created < 5); // Should reuse, not create new
+}
+
+test "ScopedLuaState" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const config = EngineConfig{};
+
+    const pool = try LuaStatePool.init(allocator, config, 3);
+    defer pool.deinit();
+
+    {
+        var scoped = try ScopedLuaState.init(pool);
+        defer scoped.deinit();
+
+        const wrapper = scoped.getWrapper();
+        try wrapper.doString("test_var = 123");
+
+        try std.testing.expect(pool.getStats().in_use_count == 1);
+    }
+
+    // State should be automatically released
+    try std.testing.expect(pool.getStats().in_use_count == 0);
+    try std.testing.expect(pool.getStats().available_count > 0);
+}
+
+test "Pool recycling policies" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const config = EngineConfig{};
+
+    // Create pool with strict recycling policies
+    const pool = try LuaStatePool.init(allocator, config, 5);
+    defer pool.deinit();
+
+    // Manually set aggressive recycling for testing
+    pool.pool_config.max_state_uses = 2;
+    pool.pool_config.max_state_age_ms = 100;
+
+    const state = try pool.acquire();
+    pool.release(state);
+
+    // Use the state again
+    const state2 = try pool.acquire();
+    pool.release(state2);
+
+    // Third acquire should get a new state due to max_uses policy
+    const state3 = try pool.acquire();
+    pool.release(state3);
+
+    const stats = pool.getStats();
+    try std.testing.expect(stats.total_recycled > 0);
+
+    // Test age-based recycling
+    std.time.sleep(150 * std.time.ns_per_ms); // Sleep 150ms
+    pool.cleanup();
+
+    const cleanup_stats = pool.getStats();
+    try std.testing.expect(cleanup_stats.total_count >= pool.pool_config.min_pool_size);
 }

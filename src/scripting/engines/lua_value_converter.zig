@@ -5,6 +5,7 @@ const std = @import("std");
 const lua = @import("../../bindings/lua/lua.zig");
 const ScriptValue = @import("../value_bridge.zig").ScriptValue;
 const ScriptFunction = @import("../interface.zig").ScriptFunction;
+const NilHandler = @import("lua_nil_handling.zig").NilHandler;
 
 /// Conversion errors
 pub const ConversionError = error{
@@ -39,7 +40,7 @@ pub fn pullScriptValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.me
 
     switch (lua_type) {
         lua.c.LUA_TNIL => {
-            return ScriptValue.nil;
+            return NilHandler.createNilScriptValue();
         },
         lua.c.LUA_TBOOLEAN => {
             return ScriptValue{ .boolean = lua.c.lua_toboolean(wrapper.state, index) != 0 };
@@ -110,7 +111,7 @@ pub fn luaToScriptValueWithOptions(
 
     switch (lua_type) {
         lua.LUA_TNIL => {
-            return ScriptValue.null;
+            return NilHandler.createNilScriptValue();
         },
         lua.LUA_TBOOLEAN => {
             return ScriptValue{ .boolean = wrapper.toBoolean(index) };
@@ -163,7 +164,7 @@ pub fn pushScriptValue(wrapper: *lua.LuaWrapper, value: ScriptValue) !void {
     if (!lua.lua_enabled) return ConversionError.LuaNotEnabled;
 
     switch (value) {
-        .nil => lua.c.lua_pushnil(wrapper.state),
+        .nil => NilHandler.pushNil(wrapper),
         .boolean => |b| lua.c.lua_pushboolean(wrapper.state, if (b) 1 else 0),
         .integer => |i| {
             if (i >= std.math.minInt(lua.c.lua_Integer) and i <= std.math.maxInt(lua.c.lua_Integer)) {
@@ -325,7 +326,7 @@ fn convertFunction(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Al
 
     // TODO: Implement proper function reference storage
     // This would create a ScriptFunction that can be called from Zig
-    return ScriptValue.nil;
+    return NilHandler.createNilScriptValue();
 }
 
 /// Convert Lua userdata
@@ -380,21 +381,33 @@ fn pushObjectValue(wrapper: *lua.LuaWrapper, obj: ScriptValue.Object) !void {
 
 /// Push ScriptValue function as Lua function
 fn pushFunctionValue(wrapper: *lua.LuaWrapper, func: *ScriptFunction) !void {
-    // For now, we'll push a light userdata representing the function pointer
-    // In a complete implementation, this would create a proper C closure
-    // that can be called from Lua and bridges to the ScriptFunction
-    _ = func;
+    if (!lua.lua_enabled) return ConversionError.LuaNotEnabled;
 
-    // Placeholder implementation - push nil for now
-    lua.c.lua_pushnil(wrapper.state);
+    // Check if this is a Lua function reference
+    // We can identify Lua functions by checking if the engine_ref points to a LuaFunctionRef
+    const LuaFunctionRef = @import("lua_function_bridge.zig").LuaFunctionRef;
 
-    // TODO: Implement proper function bridging in task 22.5
-    // This would involve:
-    // 1. Creating a C function that can be called from Lua
-    // 2. Storing the ScriptFunction reference in an upvalue or registry
-    // 3. Converting Lua arguments to ScriptValues
-    // 4. Calling the ScriptFunction with the converted arguments
-    // 5. Converting the result back to Lua values
+    // Try to cast the engine_ref to a LuaFunctionRef
+    // In a proper implementation, we'd have type tagging to safely identify this
+    // For now, we'll use a runtime check by verifying the wrapper state matches
+    const lua_func_ref: *LuaFunctionRef = @ptrCast(@alignCast(func.engine_ref));
+
+    // Verify this is actually a Lua function by checking if the wrapper state matches
+    if (lua_func_ref.wrapper.state == wrapper.state) {
+        // This is a Lua function - push it from the registry
+        lua.c.lua_rawgeti(wrapper.state, lua.c.LUA_REGISTRYINDEX, lua_func_ref.registry_key);
+
+        // Verify it's still a function
+        if (lua.c.lua_type(wrapper.state, -1) != lua.c.LUA_TFUNCTION) {
+            lua.c.lua_pop(wrapper.state, 1);
+            return ConversionError.InvalidFunctionReference;
+        }
+    } else {
+        // This is not a Lua function reference - create a C closure that calls the ScriptFunction
+        // For now, we'll just push nil as this requires more complex implementation
+        // TODO: Implement C closure creation for non-Lua ScriptFunction objects
+        lua.c.lua_pushnil(wrapper.state);
+    }
 }
 
 /// Push a ScriptValue array to Lua (deprecated)
@@ -414,9 +427,20 @@ fn pushFunction(wrapper: *lua.LuaWrapper, func: *ScriptFunction) !void {
     lua.c.lua_pushnil(wrapper.state);
 }
 
-/// Push userdata (deprecated)
+/// Push userdata using the new userdata system
 fn pushUserdata(wrapper: *lua.LuaWrapper, ud: ScriptValue.UserData) !void {
+    if (!lua.lua_enabled) return ConversionError.LuaNotEnabled;
+
+    // For now, we'll use light userdata for compatibility
+    // In the future, this could be enhanced to use the full userdata system
+    // when type information is available
     lua.c.lua_pushlightuserdata(wrapper.state, ud.ptr);
+
+    // TODO: Integrate with LuaUserdataManager when we have type information
+    // This would involve:
+    // 1. Checking if we have a userdata manager available
+    // 2. Looking up type information from ud.type_id
+    // 3. Creating proper full userdata with metatable if type is registered
 }
 
 /// Pull Lua table as ScriptValue (array or object)
@@ -521,26 +545,51 @@ fn pullObjectValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Al
 
 /// Pull function as function reference
 fn pullFunctionValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
-    _ = wrapper;
-    _ = index;
-    _ = allocator;
+    const ScriptContext = @import("../context.zig").ScriptContext;
 
-    // For now, we'll return nil since proper function bridging requires more infrastructure
-    // TODO: Implement proper function reference storage in task 22.5
-    // This would involve:
-    // 1. Storing the function in the Lua registry
-    // 2. Creating a ScriptFunction that can be called from Zig
-    // 3. Handling function calls with proper argument conversion
-    return ScriptValue.nil;
+    // Create a mock context for the function (this would normally come from the engine)
+    // In a full implementation, this would be passed in or retrieved from the wrapper
+    var temp_context = ScriptContext{
+        .name = "lua_converter",
+        .allocator = allocator,
+        .engine = undefined, // Would be set properly in real usage
+    };
+
+    const createScriptFunctionFromLua = @import("lua_function_bridge.zig").createScriptFunctionFromLua;
+    const script_func = try createScriptFunctionFromLua(allocator, &temp_context, wrapper, index);
+
+    return ScriptValue{ .function = script_func };
 }
 
 /// Pull userdata as ScriptValue
 fn pullUserdataValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
-    _ = allocator;
-
     const data_ptr = lua.c.lua_touserdata(wrapper.state, index);
 
     if (data_ptr) |ptr| {
+        // Check if this is our managed userdata format
+        const UserdataSystem = @import("lua_userdata_system.zig");
+
+        if (lua.c.lua_type(wrapper.state, index) == lua.c.LUA_TUSERDATA) {
+            // Try to read as managed userdata
+            const header: *const UserdataSystem.UserdataHeader = @ptrCast(@alignCast(ptr));
+            if (header.magic == 0xDEADBEEF) {
+                // This is our managed userdata - extract type information
+                const type_name = header.getTypeName();
+                const type_name_copy = try allocator.dupe(u8, type_name);
+
+                return ScriptValue{ .userdata = ScriptValue.UserData{
+                    .ptr = header.getData(),
+                    .type_id = type_name_copy,
+                    .deinit_fn = struct {
+                        fn deinit(type_id: []const u8, allocator_param: std.mem.Allocator) void {
+                            allocator_param.free(type_id);
+                        }
+                    }.deinit,
+                } };
+            }
+        }
+
+        // Fall back to basic userdata handling
         const userdata = ScriptValue.UserData{
             .ptr = ptr,
             .type_id = if (lua.c.lua_type(wrapper.state, index) == lua.c.LUA_TLIGHTUSERDATA)
@@ -552,7 +601,7 @@ fn pullUserdataValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.
         return ScriptValue{ .userdata = userdata };
     }
 
-    return ScriptValue.nil;
+    return NilHandler.createNilScriptValue();
 }
 
 /// Convert Lua value at index to string

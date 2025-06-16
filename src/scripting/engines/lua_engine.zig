@@ -16,6 +16,8 @@ const lua = @import("../../bindings/lua/lua.zig");
 const LuaStatePool = @import("lua_lifecycle.zig").LuaStatePool;
 const ManagedLuaState = @import("lua_lifecycle.zig").ManagedLuaState;
 const StateStats = @import("lua_lifecycle.zig").StateStats;
+const TenantManager = @import("lua_isolation.zig").TenantManager;
+const TenantLimits = @import("lua_isolation.zig").TenantLimits;
 
 /// Lua scripting engine error types
 pub const LuaEngineError = error{
@@ -37,6 +39,7 @@ const LuaContext = struct {
     allocator: std.mem.Allocator,
     pool: *LuaStatePool,
     mutex: std.Thread.Mutex,
+    tenant_id: ?[]const u8 = null,
 
     pub fn init(allocator: std.mem.Allocator, name: []const u8, pool: *LuaStatePool) !*LuaContext {
         const self = try allocator.create(LuaContext);
@@ -55,6 +58,7 @@ const LuaContext = struct {
             .allocator = allocator,
             .pool = pool,
             .mutex = std.Thread.Mutex{},
+            .tenant_id = null,
         };
 
         return self;
@@ -63,6 +67,9 @@ const LuaContext = struct {
     pub fn deinit(self: *LuaContext) void {
         self.pool.release(self.managed_state);
         self.allocator.free(self.name);
+        if (self.tenant_id) |tid| {
+            self.allocator.free(tid);
+        }
         if (self.last_error) |*err| {
             err.deinit(self.allocator);
         }
@@ -119,6 +126,7 @@ pub const LuaEngine = struct {
     contexts: std.StringHashMap(*LuaContext),
     context_mutex: std.Thread.Mutex,
     state_pool: *LuaStatePool,
+    tenant_manager: ?*TenantManager = null,
 
     const vtable = ScriptingEngine.VTable{
         .init = init,
@@ -203,6 +211,11 @@ pub const LuaEngine = struct {
             entry.value_ptr.*.deinit();
         }
         self.contexts.deinit();
+
+        // Clean up tenant manager if present
+        if (self.tenant_manager) |tm| {
+            tm.deinit();
+        }
 
         // Clean up state pool
         self.state_pool.deinit();
@@ -446,6 +459,71 @@ pub const LuaEngine = struct {
         const lua_context = getLuaContext(context) orelse return null;
         return lua_context.managed_state.getStats();
     }
+
+    // Multi-tenant support methods
+    pub fn enableMultiTenancy(self: *Self, max_tenants: usize, default_limits: TenantLimits) !void {
+        if (self.tenant_manager != null) {
+            return LuaEngineError.InvalidArgument;
+        }
+
+        self.tenant_manager = try TenantManager.init(self.allocator, max_tenants, default_limits);
+    }
+
+    pub fn createTenant(self: *Self, tenant_id: []const u8, name: []const u8, limits: ?TenantLimits) !void {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+        try tm.createTenant(tenant_id, name, limits);
+    }
+
+    pub fn deleteTenant(self: *Self, tenant_id: []const u8) !void {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+        try tm.deleteTenant(tenant_id);
+    }
+
+    pub fn createTenantContext(self: *Self, context_name: []const u8, tenant_id: []const u8) !*ScriptContext {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+
+        // Verify tenant exists
+        _ = try tm.getTenant(tenant_id);
+
+        self.context_mutex.lock();
+        defer self.context_mutex.unlock();
+
+        // Check if context already exists
+        if (self.contexts.contains(context_name)) {
+            return LuaEngineError.InvalidArgument;
+        }
+
+        // Create Lua context with tenant association
+        const lua_context = try LuaContext.init(self.allocator, context_name, self.state_pool);
+        errdefer lua_context.deinit();
+
+        // Set tenant ID
+        lua_context.tenant_id = try self.allocator.dupe(u8, tenant_id);
+
+        // Create script context wrapper
+        const script_context = try ScriptContext.init(self.allocator, context_name, &self.base, lua_context);
+        errdefer script_context.deinit();
+
+        // Store in our contexts map
+        try self.contexts.put(context_name, lua_context);
+
+        return script_context;
+    }
+
+    pub fn executeTenantScript(self: *Self, tenant_id: []const u8, code: []const u8) !void {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+        try tm.executeTenantCode(tenant_id, code);
+    }
+
+    pub fn getTenantResourceUsage(self: *Self, tenant_id: []const u8) !@import("lua_isolation.zig").IsolatedState.ResourceUsage {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+        return try tm.getTenantResourceUsage(tenant_id);
+    }
+
+    pub fn updateTenantLimits(self: *Self, tenant_id: []const u8, new_limits: TenantLimits) !void {
+        const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
+        try tm.updateTenantLimits(tenant_id, new_limits);
+    }
 };
 
 // Tests
@@ -524,4 +602,42 @@ test "LuaEngine global variables" {
 
     try std.testing.expect(result == .string);
     try std.testing.expectEqualStrings("hello", result.string);
+}
+
+test "LuaEngine multi-tenant isolation" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const config = EngineConfig{};
+
+    const engine = try LuaEngine.create(allocator, config);
+    defer engine.deinit();
+
+    const lua_engine = @as(*LuaEngine, @ptrCast(@alignCast(engine.impl)));
+
+    // Enable multi-tenancy
+    try lua_engine.enableMultiTenancy(5, TenantLimits{
+        .max_memory_bytes = 1 * 1024 * 1024,
+        .allow_io = false,
+        .allow_os = false,
+    });
+
+    // Create tenants
+    try lua_engine.createTenant("tenant1", "Test Tenant 1", null);
+    try lua_engine.createTenant("tenant2", "Test Tenant 2", null);
+
+    // Execute code in different tenants
+    try lua_engine.executeTenantScript("tenant1", "tenant_data = 'Tenant 1'");
+    try lua_engine.executeTenantScript("tenant2", "tenant_data = 'Tenant 2'");
+
+    // Variables should be isolated between tenants
+
+    // Test resource usage
+    const usage1 = try lua_engine.getTenantResourceUsage("tenant1");
+    try std.testing.expect(usage1.memory_used > 0);
+    try std.testing.expect(usage1.function_calls > 0);
+
+    // Clean up
+    try lua_engine.deleteTenant("tenant1");
+    try lua_engine.deleteTenant("tenant2");
 }

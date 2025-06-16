@@ -139,6 +139,18 @@ pub const scripting = struct {
 
     pub const engines = struct {
         pub const LuaEngine = @import("scripting/engines/lua_engine.zig").LuaEngine;
+        pub const lua_isolation = struct {
+            pub const TenantManager = @import("scripting/engines/lua_isolation.zig").TenantManager;
+            pub const TenantLimits = @import("scripting/engines/lua_isolation.zig").TenantLimits;
+            pub const TenantInfo = @import("scripting/engines/lua_isolation.zig").TenantInfo;
+            pub const IsolatedState = @import("scripting/engines/lua_isolation.zig").IsolatedState;
+            pub const IsolationError = @import("scripting/engines/lua_isolation.zig").IsolationError;
+        };
+        pub const lua_lifecycle = struct {
+            pub const LuaStatePool = @import("scripting/engines/lua_lifecycle.zig").LuaStatePool;
+            pub const ScopedLuaState = @import("scripting/engines/lua_lifecycle.zig").ScopedLuaState;
+            pub const ManagedLuaState = @import("scripting/engines/lua_lifecycle.zig").ManagedLuaState;
+        };
     };
 
     // API bridges temporarily commented out due to compilation errors

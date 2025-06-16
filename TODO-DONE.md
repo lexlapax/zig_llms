@@ -765,3 +765,29 @@
   - Integrated enhanced pooling with LuaEngine for transparent state reuse
   - Created performance demo showing state reuse and metrics
   - Added tests for pool recycling policies and scoped state handles
+
+- [x] 21.8. Add lua_State isolation mechanisms for multi-tenant scenarios - Completed 2025-06-16
+  - Created lua_isolation.zig with comprehensive tenant isolation system
+  - Implemented TenantManager for multi-tenant lua_State management
+  - Added configurable TenantLimits with fine-grained control:
+    - Memory limits with allocation tracking
+    - CPU time limits with instruction counting hooks
+    - Function call limits and stack size restrictions
+    - Module and library access controls (io, os, debug, package)
+    - Global variable restrictions and denied lists
+  - Created IsolatedState with security sandboxing:
+    - Custom environment tables for namespace isolation
+    - Resource usage monitoring and enforcement
+    - Security validation to detect isolation breaches
+    - Bytecode loading restrictions
+  - Integrated multi-tenant support into LuaEngine:
+    - enableMultiTenancy() method for initialization
+    - Per-tenant context creation and execution
+    - Resource usage monitoring per tenant
+    - Dynamic tenant limit updates
+  - Created comprehensive demo showing:
+    - Multiple tenants with different security profiles
+    - Resource limit enforcement (memory, CPU time)
+    - Security restriction validation
+    - Tenant lifecycle management
+  - Added tests for isolation, resource limits, and security

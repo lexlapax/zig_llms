@@ -31,14 +31,65 @@ pub const ConversionOptions = struct {
     convert_userdata: bool = true,
 };
 
-/// Convert a Lua value to ScriptValue
+/// Pull ScriptValue from Lua stack using lua_to* functions
+pub fn pullScriptValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    if (!lua.lua_enabled) return ConversionError.LuaNotEnabled;
+
+    const lua_type = lua.c.lua_type(wrapper.state, index);
+
+    switch (lua_type) {
+        lua.c.LUA_TNIL => {
+            return ScriptValue.nil;
+        },
+        lua.c.LUA_TBOOLEAN => {
+            return ScriptValue{ .boolean = lua.c.lua_toboolean(wrapper.state, index) != 0 };
+        },
+        lua.c.LUA_TNUMBER => {
+            // Check if it's an integer
+            if (lua.c.lua_isinteger(wrapper.state, index) != 0) {
+                const int_val = lua.c.lua_tointeger(wrapper.state, index);
+                return ScriptValue{ .integer = @intCast(int_val) };
+            } else {
+                const num_val = lua.c.lua_tonumber(wrapper.state, index);
+                return ScriptValue{ .number = num_val };
+            }
+        },
+        lua.c.LUA_TSTRING => {
+            var len: usize = 0;
+            const str_ptr = lua.c.lua_tolstring(wrapper.state, index, &len);
+            if (str_ptr) |ptr| {
+                const string_copy = try allocator.dupe(u8, ptr[0..len]);
+                return ScriptValue{ .string = string_copy };
+            } else {
+                return ScriptValue{ .string = try allocator.dupe(u8, "") };
+            }
+        },
+        lua.c.LUA_TTABLE => {
+            return try pullTableValue(wrapper, index, allocator);
+        },
+        lua.c.LUA_TFUNCTION => {
+            return try pullFunctionValue(wrapper, index, allocator);
+        },
+        lua.c.LUA_TUSERDATA, lua.c.LUA_TLIGHTUSERDATA => {
+            return try pullUserdataValue(wrapper, index, allocator);
+        },
+        lua.c.LUA_TTHREAD => {
+            // Threads (coroutines) are not directly convertible
+            return ConversionError.UnsupportedType;
+        },
+        else => {
+            return ConversionError.UnsupportedType;
+        },
+    }
+}
+
+/// Convert a Lua value to ScriptValue (deprecated - use pullScriptValue)
 pub fn luaToScriptValue(
     wrapper: *lua.LuaWrapper,
     index: c_int,
     allocator: std.mem.Allocator,
 ) !ScriptValue {
-    const options = ConversionOptions{};
-    return luaToScriptValueWithOptions(wrapper, index, allocator, options, 0);
+    return pullScriptValue(wrapper, index, allocator);
 }
 
 /// Convert a Lua value to ScriptValue with options
@@ -368,6 +419,181 @@ fn pushUserdata(wrapper: *lua.LuaWrapper, ud: ScriptValue.UserData) !void {
     lua.c.lua_pushlightuserdata(wrapper.state, ud.ptr);
 }
 
+/// Pull Lua table as ScriptValue (array or object)
+fn pullTableValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    // Check for circular reference by getting table pointer
+    const ptr = lua.c.lua_topointer(wrapper.state, index);
+    if (ptr == null) return ConversionError.InvalidValue;
+
+    // Determine if this table should be treated as an array or object
+    if (try isSequentialArray(wrapper, index)) {
+        return try pullArrayValue(wrapper, index, allocator);
+    } else {
+        return try pullObjectValue(wrapper, index, allocator);
+    }
+}
+
+/// Check if table is a sequential array (contiguous integer keys starting from 1)
+fn isSequentialArray(wrapper: *lua.LuaWrapper, index: c_int) !bool {
+    const len = lua.c.luaL_len(wrapper.state, index);
+    if (len == 0) return true; // Empty table can be array
+
+    // Check if all keys from 1 to len exist
+    var i: lua.c.lua_Integer = 1;
+    while (i <= len) : (i += 1) {
+        lua.c.lua_geti(wrapper.state, index, i);
+        const is_nil = lua.c.lua_isnil(wrapper.state, -1);
+        lua.c.lua_pop(wrapper.state, 1);
+
+        if (is_nil) {
+            return false;
+        }
+    }
+
+    // Check if there are any non-integer keys
+    lua.c.lua_pushnil(wrapper.state);
+    while (lua.c.lua_next(wrapper.state, index) != 0) {
+        // Pop value, keep key for next iteration
+        lua.c.lua_pop(wrapper.state, 1);
+
+        if (lua.c.lua_type(wrapper.state, -1) != lua.c.LUA_TNUMBER) {
+            lua.c.lua_pop(wrapper.state, 1); // Pop key
+            return false;
+        }
+
+        if (lua.c.lua_isinteger(wrapper.state, -1) == 0) {
+            lua.c.lua_pop(wrapper.state, 1); // Pop key
+            return false;
+        }
+
+        const key = lua.c.lua_tointeger(wrapper.state, -1);
+        if (key < 1 or key > len) {
+            lua.c.lua_pop(wrapper.state, 1); // Pop key
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/// Pull table as array
+fn pullArrayValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    const len = lua.c.luaL_len(wrapper.state, index);
+    var array = try ScriptValue.Array.init(allocator, @intCast(len));
+    errdefer array.deinit();
+
+    // Fill array with table elements
+    var i: lua.c.lua_Integer = 1;
+    while (i <= len) : (i += 1) {
+        lua.c.lua_geti(wrapper.state, index, i);
+        array.items[@intCast(i - 1)] = try pullScriptValue(wrapper, -1, allocator);
+        lua.c.lua_pop(wrapper.state, 1);
+    }
+
+    return ScriptValue{ .array = array };
+}
+
+/// Pull table as object
+fn pullObjectValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    var object = ScriptValue.Object.init(allocator);
+    errdefer object.deinit();
+
+    // Iterate through table key-value pairs
+    lua.c.lua_pushnil(wrapper.state);
+    while (lua.c.lua_next(wrapper.state, index) != 0) {
+        // Convert key to string
+        const key_str = try luaValueToString(wrapper, -2, allocator);
+        errdefer allocator.free(key_str);
+
+        // Convert value
+        const value = try pullScriptValue(wrapper, -1, allocator);
+        errdefer value.deinit(allocator);
+
+        // Add to object
+        try object.put(key_str, value);
+
+        // Pop value, keep key for next iteration
+        lua.c.lua_pop(wrapper.state, 1);
+    }
+
+    return ScriptValue{ .object = object };
+}
+
+/// Pull function as function reference
+fn pullFunctionValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    _ = wrapper;
+    _ = index;
+    _ = allocator;
+
+    // For now, we'll return nil since proper function bridging requires more infrastructure
+    // TODO: Implement proper function reference storage in task 22.5
+    // This would involve:
+    // 1. Storing the function in the Lua registry
+    // 2. Creating a ScriptFunction that can be called from Zig
+    // 3. Handling function calls with proper argument conversion
+    return ScriptValue.nil;
+}
+
+/// Pull userdata as ScriptValue
+fn pullUserdataValue(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) !ScriptValue {
+    _ = allocator;
+
+    const data_ptr = lua.c.lua_touserdata(wrapper.state, index);
+
+    if (data_ptr) |ptr| {
+        const userdata = ScriptValue.UserData{
+            .ptr = ptr,
+            .type_id = if (lua.c.lua_type(wrapper.state, index) == lua.c.LUA_TLIGHTUSERDATA)
+                "lua_lightuserdata"
+            else
+                "lua_userdata",
+            .deinit_fn = null,
+        };
+        return ScriptValue{ .userdata = userdata };
+    }
+
+    return ScriptValue.nil;
+}
+
+/// Convert Lua value at index to string
+fn luaValueToString(wrapper: *lua.LuaWrapper, index: c_int, allocator: std.mem.Allocator) ![]u8 {
+    const lua_type = lua.c.lua_type(wrapper.state, index);
+
+    switch (lua_type) {
+        lua.c.LUA_TSTRING => {
+            var len: usize = 0;
+            const str_ptr = lua.c.lua_tolstring(wrapper.state, index, &len);
+            if (str_ptr) |ptr| {
+                return try allocator.dupe(u8, ptr[0..len]);
+            }
+        },
+        lua.c.LUA_TNUMBER => {
+            // Convert number to string
+            if (lua.c.lua_isinteger(wrapper.state, index) != 0) {
+                const int_val = lua.c.lua_tointeger(wrapper.state, index);
+                return try std.fmt.allocPrint(allocator, "{}", .{int_val});
+            } else {
+                const num_val = lua.c.lua_tonumber(wrapper.state, index);
+                return try std.fmt.allocPrint(allocator, "{d}", .{num_val});
+            }
+        },
+        lua.c.LUA_TBOOLEAN => {
+            const bool_val = lua.c.lua_toboolean(wrapper.state, index) != 0;
+            return try allocator.dupe(u8, if (bool_val) "true" else "false");
+        },
+        else => {
+            // Use lua_typename for type name
+            const type_name = lua.c.lua_typename(wrapper.state, lua_type);
+            if (type_name) |name| {
+                const name_slice = std.mem.span(name);
+                return try std.fmt.allocPrint(allocator, "[{s}]", .{name_slice});
+            }
+        },
+    }
+
+    return try allocator.dupe(u8, "[unknown]");
+}
+
 // Tests
 test "Lua value conversion - primitives" {
     if (!lua.lua_enabled) return;
@@ -564,4 +790,205 @@ test "pushScriptValue - object conversion" {
     lua.c.lua_getfield(wrapper.state, -1, "value");
     try std.testing.expectEqual(@as(lua.c.lua_Integer, 42), lua.c.lua_tointeger(wrapper.state, -1));
     lua.c.lua_pop(wrapper.state, 2); // Pop value and table
+}
+
+test "pullScriptValue - basic types" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    // Test nil
+    lua.c.lua_pushnil(wrapper.state);
+    const nil_value = try pullScriptValue(wrapper, -1, allocator);
+    try std.testing.expect(nil_value == .nil);
+    lua.c.lua_pop(wrapper.state, 1);
+
+    // Test boolean
+    lua.c.lua_pushboolean(wrapper.state, 1);
+    const bool_value = try pullScriptValue(wrapper, -1, allocator);
+    try std.testing.expect(bool_value == .boolean);
+    try std.testing.expect(bool_value.boolean == true);
+    lua.c.lua_pop(wrapper.state, 1);
+
+    // Test integer
+    lua.c.lua_pushinteger(wrapper.state, 42);
+    const int_value = try pullScriptValue(wrapper, -1, allocator);
+    defer int_value.deinit(allocator);
+    try std.testing.expect(int_value == .integer);
+    try std.testing.expectEqual(@as(i64, 42), int_value.integer);
+    lua.c.lua_pop(wrapper.state, 1);
+
+    // Test number (float)
+    lua.c.lua_pushnumber(wrapper.state, 3.14159);
+    const num_value = try pullScriptValue(wrapper, -1, allocator);
+    defer num_value.deinit(allocator);
+    try std.testing.expect(num_value == .number);
+    try std.testing.expectApproxEqRel(@as(f64, 3.14159), num_value.number, 0.00001);
+    lua.c.lua_pop(wrapper.state, 1);
+
+    // Test string
+    lua.c.lua_pushliteral(wrapper.state, "test string");
+    const str_value = try pullScriptValue(wrapper, -1, allocator);
+    defer str_value.deinit(allocator);
+    try std.testing.expect(str_value == .string);
+    try std.testing.expectEqualStrings("test string", str_value.string);
+    lua.c.lua_pop(wrapper.state, 1);
+}
+
+test "pullScriptValue - array conversion" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    // Create Lua array table
+    lua.c.lua_createtable(wrapper.state, 3, 0);
+
+    // Add elements [1] = 10, [2] = "hello", [3] = true
+    lua.c.lua_pushinteger(wrapper.state, 10);
+    lua.c.lua_seti(wrapper.state, -2, 1);
+
+    lua.c.lua_pushliteral(wrapper.state, "hello");
+    lua.c.lua_seti(wrapper.state, -2, 2);
+
+    lua.c.lua_pushboolean(wrapper.state, 1);
+    lua.c.lua_seti(wrapper.state, -2, 3);
+
+    // Pull as ScriptValue
+    var array_value = try pullScriptValue(wrapper, -1, allocator);
+    defer array_value.deinit(allocator);
+
+    try std.testing.expect(array_value == .array);
+    try std.testing.expectEqual(@as(usize, 3), array_value.array.items.len);
+
+    // Check elements
+    try std.testing.expect(array_value.array.items[0] == .integer);
+    try std.testing.expectEqual(@as(i64, 10), array_value.array.items[0].integer);
+
+    try std.testing.expect(array_value.array.items[1] == .string);
+    try std.testing.expectEqualStrings("hello", array_value.array.items[1].string);
+
+    try std.testing.expect(array_value.array.items[2] == .boolean);
+    try std.testing.expect(array_value.array.items[2].boolean == true);
+
+    lua.c.lua_pop(wrapper.state, 1);
+}
+
+test "pullScriptValue - object conversion" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    // Create Lua object table
+    lua.c.lua_createtable(wrapper.state, 0, 3);
+
+    // Add key-value pairs
+    lua.c.lua_pushliteral(wrapper.state, "name");
+    lua.c.lua_pushliteral(wrapper.state, "TestObject");
+    lua.c.lua_settable(wrapper.state, -3);
+
+    lua.c.lua_pushliteral(wrapper.state, "count");
+    lua.c.lua_pushinteger(wrapper.state, 100);
+    lua.c.lua_settable(wrapper.state, -3);
+
+    lua.c.lua_pushliteral(wrapper.state, "active");
+    lua.c.lua_pushboolean(wrapper.state, 0);
+    lua.c.lua_settable(wrapper.state, -3);
+
+    // Pull as ScriptValue
+    var obj_value = try pullScriptValue(wrapper, -1, allocator);
+    defer obj_value.deinit(allocator);
+
+    try std.testing.expect(obj_value == .object);
+    try std.testing.expectEqual(@as(usize, 3), obj_value.object.map.count());
+
+    // Check fields
+    const name_val = obj_value.object.get("name").?;
+    try std.testing.expect(name_val == .string);
+    try std.testing.expectEqualStrings("TestObject", name_val.string);
+
+    const count_val = obj_value.object.get("count").?;
+    try std.testing.expect(count_val == .integer);
+    try std.testing.expectEqual(@as(i64, 100), count_val.integer);
+
+    const active_val = obj_value.object.get("active").?;
+    try std.testing.expect(active_val == .boolean);
+    try std.testing.expect(active_val.boolean == false);
+
+    lua.c.lua_pop(wrapper.state, 1);
+}
+
+test "pullScriptValue - userdata conversion" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    // Test light userdata
+    const test_data: i32 = 12345;
+    lua.c.lua_pushlightuserdata(wrapper.state, @ptrCast(@constCast(&test_data)));
+
+    const ud_value = try pullScriptValue(wrapper, -1, allocator);
+    defer ud_value.deinit(allocator);
+
+    try std.testing.expect(ud_value == .userdata);
+    try std.testing.expectEqualStrings("lua_lightuserdata", ud_value.userdata.type_id);
+    try std.testing.expect(ud_value.userdata.ptr != null);
+
+    lua.c.lua_pop(wrapper.state, 1);
+}
+
+test "pullScriptValue - round trip conversion" {
+    if (!lua.lua_enabled) return;
+
+    const allocator = std.testing.allocator;
+    const wrapper = try lua.LuaWrapper.init(allocator);
+    defer wrapper.deinit();
+
+    // Create complex nested structure
+    var original_obj = ScriptValue.Object.init(allocator);
+    defer original_obj.deinit();
+
+    var nested_array = try ScriptValue.Array.init(allocator, 2);
+    defer nested_array.deinit();
+    nested_array.items[0] = ScriptValue{ .integer = 1 };
+    nested_array.items[1] = ScriptValue{ .string = try allocator.dupe(u8, "nested") };
+    defer allocator.free(nested_array.items[1].string);
+
+    try original_obj.put("numbers", ScriptValue{ .array = nested_array });
+    try original_obj.put("pi", ScriptValue{ .number = 3.14159 });
+    try original_obj.put("enabled", ScriptValue{ .boolean = true });
+
+    // Push to Lua
+    try pushScriptValue(wrapper, ScriptValue{ .object = original_obj });
+
+    // Pull back from Lua
+    var pulled_obj = try pullScriptValue(wrapper, -1, allocator);
+    defer pulled_obj.deinit(allocator);
+
+    // Verify round-trip conversion
+    try std.testing.expect(pulled_obj == .object);
+    try std.testing.expectEqual(@as(usize, 3), pulled_obj.object.map.count());
+
+    // Check nested array
+    const numbers_val = pulled_obj.object.get("numbers").?;
+    try std.testing.expect(numbers_val == .array);
+    try std.testing.expectEqual(@as(usize, 2), numbers_val.array.items.len);
+    try std.testing.expectEqual(@as(i64, 1), numbers_val.array.items[0].integer);
+    try std.testing.expectEqualStrings("nested", numbers_val.array.items[1].string);
+
+    // Check other fields
+    const pi_val = pulled_obj.object.get("pi").?;
+    try std.testing.expectApproxEqRel(@as(f64, 3.14159), pi_val.number, 0.00001);
+
+    const enabled_val = pulled_obj.object.get("enabled").?;
+    try std.testing.expect(enabled_val.boolean == true);
+
+    lua.c.lua_pop(wrapper.state, 1);
 }

@@ -2,6 +2,18 @@
 
 ## Phase 10: Lua Scripting Engine - IN PROGRESS
 
+### 21. Lua Core Integration - COMPLETED 2025-06-16
+- [x] 21.1. Set up Lua library dependencies in build.zig - Completed 2025-06-16
+- [x] 21.2. Create LuaEngine struct implementing ScriptingEngine interface - Completed 2025-06-16
+- [x] 21.3. Implement lua_State lifecycle management - Completed 2025-06-16
+- [x] 21.4. Add Zig allocator integration with Lua memory management - Completed 2025-06-16
+- [x] 21.5. Implement basic script execution and error handling - Completed 2025-06-16
+- [x] 21.6. Create lua_pcall wrapper with proper error propagation - Completed 2025-06-16
+- [x] 21.7. Implement lua_State pooling for performance - Completed 2025-06-16
+- [x] 21.8. Add lua_State isolation mechanisms for multi-tenant scenarios - Completed 2025-06-16
+- [x] 21.9. Create lua_State snapshots for rollback capabilities - Completed 2025-06-16
+- [x] 21.10. Implement custom panic handler integration with Zig error handling - Completed 2025-06-16
+
 ### 20. Lua Engine Research and Planning - COMPLETED 2025-06-16
 - [x] 20.1. Research Lua 5.4 C API integration with Zig and add additional TODO.md entries as needed - Completed 2025-06-15
 - [x] 20.2. Analyze lua_State management and memory integration - Completed 2025-06-15
@@ -819,3 +831,41 @@
     - Snapshot lifecycle and management
   - Updated main.zig exports to include snapshot types
   - Added comprehensive tests for snapshot creation and management
+
+- [x] 21.10. Implement custom panic handler integration with Zig error handling - Completed 2025-06-16
+  - Created lua_panic.zig with comprehensive panic handling system
+  - Implemented PanicInfo for capturing detailed panic information:
+    - Error message, type classification, stack traces
+    - Timestamp, thread ID, and Lua stack depth
+    - Memory management with proper cleanup
+  - Created PanicHandler with configurable recovery strategies:
+    - Installation/uninstallation of custom panic handlers
+    - Thread-local storage for panic context
+    - Configurable recovery strategies (reset_state, new_state, propagate)
+  - Implemented ProtectedExecutor for safe script execution:
+    - Protected script execution with automatic panic detection
+    - Protected function calls with argument handling
+    - Panic history management and clearing
+  - Added comprehensive panic type detection:
+    - Memory errors, stack overflows, protection faults
+    - Internal errors and error object classification
+  - Created stack trace capture with configurable depth
+  - Implemented RecoveryUtils for state recovery and diagnostics:
+    - State recovery attempts after panics
+    - Diagnostic report generation with memory statistics
+    - Memory usage tracking and analysis
+  - Integrated panic handling into LuaEngine and LuaContext:
+    - Context-level panic handler enablement/disablement
+    - Engine-level panic information retrieval
+    - Automatic cleanup in context destruction
+  - Added panic handling configuration to EngineConfig:
+    - enable_panic_handler flag
+    - panic_recovery_strategy enumeration
+    - Integration with existing engine configuration
+  - Created lua_panic_demo.zig demonstrating:
+    - Panic handler installation and configuration
+    - Protected execution with error scenarios
+    - Stack trace capture and diagnostic reporting
+    - State recovery and custom callbacks
+  - Updated main.zig exports to include panic handling types
+  - Added comprehensive tests for panic handler functionality

@@ -162,6 +162,14 @@ pub const scripting = struct {
             pub const SerializedValue = @import("scripting/engines/lua_snapshot.zig").SerializedValue;
             pub const SnapshotError = @import("scripting/engines/lua_snapshot.zig").SnapshotError;
         };
+        pub const lua_panic = struct {
+            pub const PanicHandler = @import("scripting/engines/lua_panic.zig").PanicHandler;
+            pub const PanicHandlerConfig = @import("scripting/engines/lua_panic.zig").PanicHandlerConfig;
+            pub const PanicInfo = @import("scripting/engines/lua_panic.zig").PanicInfo;
+            pub const PanicError = @import("scripting/engines/lua_panic.zig").PanicError;
+            pub const ProtectedExecutor = @import("scripting/engines/lua_panic.zig").ProtectedExecutor;
+            pub const RecoveryUtils = @import("scripting/engines/lua_panic.zig").RecoveryUtils;
+        };
     };
 
     // API bridges temporarily commented out due to compilation errors

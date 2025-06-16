@@ -32,6 +32,21 @@ pub const EngineConfig = struct {
     /// Maximum total size of all snapshots in bytes
     max_snapshot_size_bytes: usize = 50 * 1024 * 1024, // 50MB default
 
+    /// Enable panic handler for error recovery
+    enable_panic_handler: bool = false,
+
+    /// Panic handler recovery strategy
+    panic_recovery_strategy: PanicRecoveryStrategy = .reset_state,
+
+    pub const PanicRecoveryStrategy = enum {
+        /// Attempt to reset the Lua state
+        reset_state,
+        /// Create a new Lua state
+        new_state,
+        /// Propagate the error
+        propagate,
+    };
+
     pub const SandboxLevel = enum {
         /// No restrictions
         none,

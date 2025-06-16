@@ -55,26 +55,41 @@ zig_agents/
 
 ## Development Status
 
-zig_llms is currently under active development. Here's the current implementation status:
+zig_llms is currently under active development with significant progress across multiple phases:
 
-### ✅ Completed (Phase 1 & 2)
-- **Core Infrastructure**: Types, error handling, provider interface, memory management
-- **Build System**: Makefile, test configuration  
+### ✅ Core Framework Complete (Phases 1-9)
+- **Foundation**: Types, error handling, provider interface, memory management, build system
+- **Provider System**: Complete OpenAI provider with HTTP client, connection pooling, retry logic
+- **Agent System**: Full agent lifecycle management with BaseAgent and LLMAgent implementations
+- **Tool System**: 8 built-in tools (file, http, system, data, process, math, feed, wrapper) with discovery and validation
+- **Workflow Engine**: Sequential, parallel, conditional, and loop patterns with error handling and state management
+- **Hook System**: Comprehensive lifecycle hooks with metrics, logging, tracing, validation, and caching
+- **Event System**: Event emitter with filtering, recording, and replay functionality
+- **Memory Management**: Short-term conversation memory with ring buffer and token counting
+- **Output Parsing**: JSON parser with recovery and schema-guided extraction
+- **C-API Bindings**: Complete C-API with memory management and error handling
 - **Testing Framework**: Scenarios, mocks, matchers, fixtures for comprehensive testing
-- **Provider System**: Complete OpenAI provider with HTTP client and connection pooling
-- **HTTP Infrastructure**: Request/response handling, connection pooling, retry logic
-- **Memory Management**: Short-term conversation memory with token counting
 
-### 🚧 In Progress (Phase 2)
-- JSON schema validation and utilities
-- Retry logic with exponential backoff
+### ✅ Scripting Engine Infrastructure Complete (Phase 9)
+- **Core Interface**: VTable-based ScriptingEngine with universal value bridge system
+- **Error Handling**: Stack traces, recovery strategies, and sandboxing support
+- **Registry System**: Dynamic engine discovery with lazy loading and feature detection
+- **API Bridges**: 10 complete bridges exposing all zig_llms functionality to scripts
+- **Type Marshaling**: Complex structure conversion for AgentConfig, ToolDefinition, etc.
 
-### 📋 Planned (Phase 3+)
-- Agent system with lifecycle management
-- Tool infrastructure and built-in tools
-- Workflow engine for complex task orchestration
-- Event system and output parsing
-- C-API bindings for language interoperability
+### 🚧 Lua Scripting Engine In Progress (Phase 10)
+- ✅ **Research and Planning**: Comprehensive analysis of Lua 5.4 integration (10/10 complete)
+- ✅ **Core Integration**: State management, pooling, isolation, snapshots, panic handling (10/10 complete)
+- 🚧 **Type System**: ScriptValue ↔ Lua type conversion (0/11 in progress)
+- 📋 **API Bridge Integration**: Lua C function wrappers for all bridges
+- 📋 **Advanced Features**: Coroutines, metatables, module system, debug hooks
+- 📋 **Security & Sandboxing**: Restricted environments, resource limits, bytecode validation
+
+### 📋 Planned (Phases 11-14)
+- **QuickJS Engine**: Modern JavaScript with ES2020+ features and async/await support
+- **Wren Engine**: Fiber-based concurrency system with foreign class integration
+- **Cross-Engine Integration**: Unified testing framework and performance comparisons
+- **Documentation & Polish**: Auto-generated docs, comprehensive examples, tutorials
 
 ## Core Features
 
@@ -82,9 +97,42 @@ zig_llms is currently under active development. Here's the current implementatio
     *   Standardized provider interface for LLM interactions
     *   **OpenAI provider fully implemented** with chat completions API
     *   Extensible design for adding more providers (Anthropic, Cohere, local models via Ollama)
+*   **Agent System**: ✅ **IMPLEMENTED**
+    *   Complete agent lifecycle management with BaseAgent and LLMAgent
+    *   Thread-safe state management with snapshots and pools
+    *   Flexible prompt engineering and management utilities
+    *   Hook system integration for extensible agent behavior
+*   **Tool System**: ✅ **IMPLEMENTED**
+    *   8 built-in tools: file operations, HTTP requests, system info, data processing, etc.
+    *   Dynamic tool discovery and registration with validation
+    *   External tool integration with multiple execution strategies
+    *   Schema-based input/output validation
+*   **Workflow Engine**: ✅ **IMPLEMENTED**
+    *   Sequential, parallel, conditional, and loop workflow patterns
+    *   Error handling with retry policies and circuit breakers
+    *   State management with checkpoint and recovery capabilities
+    *   Workflow composition for complex task orchestration
 *   **Memory Management**: ✅ **IMPLEMENTED**
     *   Short-term memory for conversational context with ring buffer and token counting
+    *   Thread-safe operations with atomic updates and snapshots
     *   (Future) Long-term memory solutions for persistent knowledge and learning
+*   **Hook System**: ✅ **IMPLEMENTED**
+    *   Comprehensive lifecycle hooks (metrics, logging, tracing, validation, caching)
+    *   Composable hook chains with priority ordering
+    *   Built-in hooks for common patterns (rate limiting, middleware, adapters)
+*   **Event System**: ✅ **IMPLEMENTED**
+    *   Event emitter with pattern matching and filtering
+    *   Event recording and replay for debugging and testing
+    *   Subscription management with callback support
+*   **Scripting Engine Framework**: ✅ **IMPLEMENTED**
+    *   Universal scripting engine interface with VTable pattern
+    *   10 complete API bridges exposing all zig_llms functionality
+    *   Type marshaling system for complex structure conversion
+    *   Lua 5.4 engine with state management, pooling, isolation, and panic handling
+*   **C-API for Bindings**: ✅ **IMPLEMENTED**
+    *   Complete C-API with memory management and error handling
+    *   Session-based isolation for multi-client scenarios
+    *   Comprehensive type conversion and JSON utilities
 *   **Testing Framework**: ✅ **IMPLEMENTED**
     *   Comprehensive testing utilities with mocks, fixtures, and scenarios
     *   Declarative test scenarios for end-to-end testing
@@ -92,21 +140,7 @@ zig_llms is currently under active development. Here's the current implementatio
 *   **HTTP Infrastructure**: ✅ **IMPLEMENTED**
     *   Robust HTTP client with request/response handling
     *   Connection pooling for efficient resource usage
-    *   JSON serialization/deserialization support
-*   **Agent Core**: 📋 **PLANNED**
-    *   Agent lifecycle management
-    *   Flexible prompt engineering and management utilities
-    *   State management and context handling
-*   **Tooling System**: 📋 **PLANNED**
-    *   Define custom tools with clear input/output schemas
-    *   Mechanism for agents to discover, select, and execute tools
-    *   Support for both synchronous and asynchronous tool operations
-*   **Workflow Engine**: 📋 **PLANNED**
-    *   Define sequences of agent actions, tool invocations, and conditional logic
-    *   Orchestrate complex tasks involving multiple steps or agent collaborations
-*   **C-API for Bindings**: 📋 **PLANNED**
-    *   Expose key functionalities through a C-compatible interface
-    *   Enable easy creation of bindings for languages like Lua (e.g., via LuaJIT FFI), Python, etc.
+    *   Retry logic with exponential backoff
 *   **Zig-Native Benefits**: ✅ **IMPLEMENTED**
     *   Compile-time safety and error handling
     *   Manual memory management for predictable performance and resource usage

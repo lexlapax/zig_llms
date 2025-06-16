@@ -18,6 +18,8 @@ const ManagedLuaState = @import("lua_lifecycle.zig").ManagedLuaState;
 const StateStats = @import("lua_lifecycle.zig").StateStats;
 const TenantManager = @import("lua_isolation.zig").TenantManager;
 const TenantLimits = @import("lua_isolation.zig").TenantLimits;
+const PanicHandler = @import("lua_panic.zig").PanicHandler;
+const PanicHandlerConfig = @import("lua_panic.zig").PanicHandlerConfig;
 
 /// Lua scripting engine error types
 pub const LuaEngineError = error{
@@ -40,6 +42,7 @@ const LuaContext = struct {
     pool: *LuaStatePool,
     mutex: std.Thread.Mutex,
     tenant_id: ?[]const u8 = null,
+    panic_handler: ?*PanicHandler = null,
 
     pub fn init(allocator: std.mem.Allocator, name: []const u8, pool: *LuaStatePool) !*LuaContext {
         const self = try allocator.create(LuaContext);
@@ -59,6 +62,7 @@ const LuaContext = struct {
             .pool = pool,
             .mutex = std.Thread.Mutex{},
             .tenant_id = null,
+            .panic_handler = null,
         };
 
         return self;
@@ -72,6 +76,10 @@ const LuaContext = struct {
         }
         if (self.last_error) |*err| {
             err.deinit(self.allocator);
+        }
+        if (self.panic_handler) |handler| {
+            handler.deinit();
+            self.allocator.destroy(handler);
         }
         self.allocator.destroy(self);
     }
@@ -113,6 +121,33 @@ const LuaContext = struct {
 
     pub fn collectGarbage(self: *LuaContext) void {
         self.managed_state.collectGarbage();
+    }
+
+    pub fn enablePanicHandler(self: *LuaContext, config: PanicHandlerConfig) !void {
+        if (self.panic_handler != null) {
+            return; // Already enabled
+        }
+
+        const handler = try self.allocator.create(PanicHandler);
+        errdefer self.allocator.destroy(handler);
+
+        handler.* = try PanicHandler.init(self.getWrapper(), config);
+        try handler.install();
+
+        self.panic_handler = handler;
+    }
+
+    pub fn disablePanicHandler(self: *LuaContext) !void {
+        if (self.panic_handler) |handler| {
+            try handler.uninstall();
+            handler.deinit();
+            self.allocator.destroy(handler);
+            self.panic_handler = null;
+        }
+    }
+
+    pub fn getPanicHandler(self: *LuaContext) ?*PanicHandler {
+        return self.panic_handler;
     }
 };
 
@@ -523,6 +558,36 @@ pub const LuaEngine = struct {
     pub fn updateTenantLimits(self: *Self, tenant_id: []const u8, new_limits: TenantLimits) !void {
         const tm = self.tenant_manager orelse return LuaEngineError.InvalidArgument;
         try tm.updateTenantLimits(tenant_id, new_limits);
+    }
+
+    // Panic handling methods
+    pub fn enablePanicHandling(self: *Self, context: *ScriptContext, config: ?PanicHandlerConfig) !void {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
+
+        const panic_config = config orelse PanicHandlerConfig{
+            .enable_recovery = true,
+            .capture_stack_trace = true,
+            .log_panics = true,
+            .recovery_strategy = .reset_state,
+        };
+
+        try lua_context.enablePanicHandler(panic_config);
+    }
+
+    pub fn disablePanicHandling(self: *Self, context: *ScriptContext) !void {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return LuaEngineError.ContextNotFound;
+        try lua_context.disablePanicHandler();
+    }
+
+    pub fn getPanicInfo(self: *Self, context: *ScriptContext) ?@import("lua_panic.zig").PanicInfo {
+        _ = self;
+        const lua_context = getLuaContext(context) orelse return null;
+        if (lua_context.getPanicHandler()) |handler| {
+            return handler.getLastPanic();
+        }
+        return null;
     }
 };
 
